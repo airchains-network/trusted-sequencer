@@ -1,0 +1,133 @@
+@startuml Enhanced ZK Sequencer Flow with Data Availability Layer
+
+skinparam monochrome false
+skinparam shadowing false
+skinparam defaultFontSize 14
+skinparam sequenceMessageAlign center
+skinparam sequenceArrowThickness 2
+skinparam ParticipantBackgroundColor #FFD700
+skinparam ActorBackgroundColor #FF4500
+skinparam NoteBackgroundColor #E0FFFF
+
+actor User as U
+
+participant "L2 ZKFHE Sequencer" as ZKS
+participant "L2 State" as L2S
+participant "DA Layer (EigenDA/Avail/Celestia)" as DA
+participant "Batch Relayer #1" as BR1
+participant "Batch Relayer #2" as BR2
+participant "Batch Relayer #N" as BRN
+participant "ZKFHE Prover" as P
+participant "Settlement Layer (Junction)" as L1
+
+== Transaction Submission ==
+loop Users Send Transactions
+    U -[#Blue]-> ZKS: Send Raw Transaction (eth_sendRawTransaction)
+    ZKS -[#Blue]-> ZKS: Validate Tx (Signature, Nonce, Gas, Balance)
+    
+    alt Tx Invalid
+        ZKS -[#Red]-> U: Reject Tx (Error Message)
+    else Tx Valid
+        ZKS -[#Blue]-> L2S: Add Tx to L2 Mempool
+        L2S -[#Blue]-> ZKS: Acknowledge Tx Queued
+    end
+end
+
+== FHEVM Execution ==
+loop Execute Transactions Off-Chain
+    ZKS -[#Blue]-> ZKS: Decode EVM Bytecode (Opcode Parsing)
+    ZKS -[#Blue]-> ZKS: Execute Opcodes (FHEVM Execution)
+    ZKS -[#Blue]-> L2S: Apply State Changes (Storage, Balances, Nonces)
+    ZKS -[#Blue]-> U: Confirm Tx Execution (Locally Finalized)
+end
+
+== Batch Creation on L2 ==
+loop Every 128 Txns
+    ZKS -[#Blue]-> L2S: Fetch Local Finalized Txns (Max 128)
+    L2S -[#Blue]-> ZKS: Return Tx List
+    ZKS -[#Blue]-> ZKS: Compute State Diff (Pre/Post State Roots)
+    ZKS -[#Blue]-> ZKS: Build Merkle Tree for Txns
+    ZKS -[#Blue]-> ZKS: Compute Batch Hash (Txns + State Root)
+    ZKS -[#Blue]-> ZKS: Generate Batch Commitment (Hash + Metadata)
+end
+
+== Batch Submission with Data Availability ==
+ZKS -[#Purple]-> DA: Publish Batch Tx Data (Ensure Data Availability)
+DA -[#Purple]-> DA: Store Tx Data (EigenDA/Avail/Celestia)
+note right: Data Availability Ensured\nTx Data Stored on DA Layer
+DA -[#Purple]-> ZKS: Return DA Commitment (e.g., Merkle Root)
+ZKS -[#Green]-> BR1: Submit Batch Proposal (DA Commitment, Batch Hash, State Root)
+BR1 -[#Green]-> BR2: Validate & Relay Batch
+BR2 -[#Green]-> BRN: Validate & Relay Batch
+BRN -[#Green]-> L1: Submit Batch Metadata (DA Commitment, Hash)
+L1 -[#Green]-> L1: Store Batch Metadata (Rollup Smart Contract)
+L1 -[#Green]-> BR1: Emit BatchStored Event (Batch #, Hash)
+BR1 -[#Green]-> ZKS: Confirm Batch Submission
+
+== ZK Proof Generation ==
+loop For Each Batch
+    BR1 -[#Green]-> P: Request ZK Proof (Batch Hash, State Roots)
+    P -[#Purple]-> DA: Fetch Tx Data for Proof (Data Availability)
+    DA -[#Purple]-> P: Return Tx Data
+    P -[#Blue]-> L2S: Fetch Pre/Post State Roots
+    L2S -[#Blue]-> P: Return State Data
+    P -[#Green]-> P: Compute ZK Circuit Inputs (State Transition)
+    P -[#Green]-> P: Generate ZK-SNARK Proof (Validity Proof)
+    P -[#Green]-> BR1: Return ZK Proof + Public Inputs
+end
+
+== Batch Finalization on L1 ==
+BR1 -[#Green]-> L1: Submit ZK Proof (Proof, Public Inputs)
+L1 -[#Green]-> L1: Verify ZK Proof (Rollup Smart Contract)
+alt Proof Valid
+    L1 -[#Green]-> L1: Update L1 State Root (Commit Finalized Batch)
+    L1 -[#Green]-> BR1: Emit BatchFinalized Event (Batch #, State Root)
+    BR1 -[#Green]-> ZKS: Notify Batch Finalized (Update L2 State)
+else Proof Invalid
+    L1 -[#Red]-> BR1: Reject Batch (Re-Proof Required)
+    BR1 -[#Green]-> P: Retry Proof Generation
+end
+
+note right of ZKS
+  L2 ZKFHE Sequencer
+  - Validates & executes txns (FHEVM)
+  - Computes state diffs & Merkle tree
+  - Publishes tx data to DA Layer
+end note
+
+note right of L2S
+  L2 State
+  - Stores L2 mempool
+  - Tracks account states
+  - Manages rollup execution
+end note
+
+note right of DA
+  DA Layer (EigenDA/Avail/Celestia)
+  - Stores tx data for availability
+  - Provides data for proof generation
+  - Enables user verification
+end note
+
+note right of BR1
+  L1 Batch Relayer
+  - Bridges L2 batches to L1
+  - Submits metadata & ZK proofs
+  - Decentralized batch submission
+end note
+
+note right of P
+  ZKFHE Prover
+  - Fetches tx data from DA Layer
+  - Generates ZK-SNARK proofs
+  - Ensures L2 state transitions are valid
+end note
+
+note right of L1
+  Settlement Layer (Junction)
+  - Stores batch metadata
+  - Verifies ZK proofs
+  - Finalizes rollup state
+end note
+
+@enduml
