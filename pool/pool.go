@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/airchains-network/trusted-sequencer/internal/db"
-	"github.com/airchains-network/trusted-sequencer/internal/eth"
+	"github.com/airchains-network/trusted-sequencer/db"
+	"github.com/airchains-network/trusted-sequencer/eth"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/sirupsen/logrus"

@@ -1,0 +1,14 @@
+[general]
+geth_rpc_url = "http://127.0.0.1:8545"
+proxy_port = ":8080"
+
+[database]
+txn_db_path = "./data/txn_db"
+batch_db_path = "./data/batch_db"
+
+[da]
+type = "avail"  # "avail" or "celestia"
+node_addr = "" # url of node_addr
+auth_token = "" 
+namespace = "airchains"
+station_namespace = "station-1"

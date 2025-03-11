@@ -7,10 +7,10 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/airchains-network/trusted-sequencer/internal/batch"
-	"github.com/airchains-network/trusted-sequencer/internal/db"
-	"github.com/airchains-network/trusted-sequencer/internal/eth"
-	"github.com/airchains-network/trusted-sequencer/internal/pool"
+	"github.com/airchains-network/trusted-sequencer/batch"
+	"github.com/airchains-network/trusted-sequencer/db"
+	"github.com/airchains-network/trusted-sequencer/eth"
+	"github.com/airchains-network/trusted-sequencer/pool"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -267,15 +267,31 @@ func handleRPC(c *gin.Context, client *eth.Client, txnDB, batchDB db.DB, pool *p
 			ExecutionTraces   []string              `json:"execution_traces"`
 			PrevMerkleHash    string                `json:"prev_merkle_hash"`
 			CurrentMerkleHash string                `json:"current_merkle_hash"`
+			PreviousStateRoot string                `json:"previous_state_root"`
+			CurrentStateRoot  string                `json:"current_state_root"`
+			DAProviddr        string                `json:"da_provider"`
+			DACommitment      string                `json:"da_commitment"`
+			DAHash            string                `json:"da_hash"`
 			BatchNo           int                   `json:"batch_no"`
 			Metadata          batch.BatchMetadata   `json:"metadata"`
+			Commitment        string                `json:"commitment"`
+			Submitted         bool                  `json:"submitted"`
+			Verified          bool                  `json:"verified"`
 		}{
 			Transactions:      decodedTxns,
 			ExecutionTraces:   b.ExecutionTraces,
 			PrevMerkleHash:    b.PrevMerkleHash,
 			CurrentMerkleHash: b.CurrentMerkleHash,
+			PreviousStateRoot: b.PreviousStateRoot,
+			CurrentStateRoot:  b.CurrentStateRoot,
+			DAProviddr:        b.DAProvider,
+			DACommitment:      b.DACommitment,
+			DAHash:            b.DAHash,
 			BatchNo:           b.BatchNo,
 			Metadata:          b.Metadata,
+			Commitment:        b.Commitment,
+			Submitted:         b.Submitted,
+			Verified:          b.Verified,
 		}
 		c.JSON(http.StatusOK, resp)
 
@@ -335,15 +351,31 @@ func handleRPC(c *gin.Context, client *eth.Client, txnDB, batchDB db.DB, pool *p
 			ExecutionTraces   []string              `json:"execution_traces"`
 			PrevMerkleHash    string                `json:"prev_merkle_hash"`
 			CurrentMerkleHash string                `json:"current_merkle_hash"`
+			PreviousStateRoot string                `json:"previous_state_root"`
+			CurrentStateRoot  string                `json:"current_state_root"`
+			DAProviddr        string                `json:"da_provider"`
+			DACommitment      string                `json:"da_commitment"`
+			DAHash            string                `json:"da_hash"`
 			BatchNo           int                   `json:"batch_no"`
 			Metadata          batch.BatchMetadata   `json:"metadata"`
+			Commitment        string                `json:"commitment"`
+			Submitted         bool                  `json:"submitted"`
+			Verified          bool                  `json:"verified"`
 		}{
 			Transactions:      decodedTxns,
 			ExecutionTraces:   b.ExecutionTraces,
 			PrevMerkleHash:    b.PrevMerkleHash,
 			CurrentMerkleHash: b.CurrentMerkleHash,
+			PreviousStateRoot: b.PreviousStateRoot,
+			CurrentStateRoot:  b.CurrentStateRoot,
+			DAProviddr:        b.DAProvider,
+			DACommitment:      b.DACommitment,
+			DAHash:            b.DAHash,
 			BatchNo:           b.BatchNo,
 			Metadata:          b.Metadata,
+			Commitment:        b.Commitment,
+			Submitted:         b.Submitted,
+			Verified:          b.Verified,
 		}
 		c.JSON(http.StatusOK, resp)
 

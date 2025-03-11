@@ -1,22 +1,27 @@
 package batch
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"math/big"
+	"strings"
 	"time"
 
-	"github.com/airchains-network/trusted-sequencer/internal/db"
-	"github.com/airchains-network/trusted-sequencer/internal/eth"
+	"github.com/airchains-network/trusted-sequencer/batch/da"
+
+	"github.com/airchains-network/trusted-sequencer/db"
+	"github.com/airchains-network/trusted-sequencer/eth"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/sirupsen/logrus"
 )
 
-// Batch represents a group of 128 transactions
+// Batch represents a group of 128 transactions with DA commitment
 type Batch struct {
 	Transactions      []string      `json:"transactions"`
 	ExecutionTraces   []string      `json:"execution_traces"`
@@ -26,14 +31,20 @@ type Batch struct {
 	CurrentStateRoot  string        `json:"current_state_root"`
 	BatchNo           int           `json:"batch_no"`
 	Metadata          BatchMetadata `json:"metadata"`
+	Commitment        string        `json:"commitment"`
+	DACommitment      string        `json:"da_commitment"`
+	DAHash            string        `json:"da_hash"`
+	DAProvider        string        `json:"da_provider"`
 	Submitted         bool          `json:"submitted"`
 	Verified          bool          `json:"verified"`
 }
 
 // BatchMetadata holds metadata for a batch
+// TODO add station id from config
 type BatchMetadata struct {
 	TotalGasUsed uint64 `json:"total_gas_used"`
 	Timestamp    int64  `json:"timestamp"`
+	StationID    string `json:"station_id"`
 }
 
 // txData holds transaction data for batching
@@ -45,8 +56,7 @@ type txData struct {
 }
 
 // ProcessBlocks processes Ethereum blocks and creates batches
-
-func ProcessBlocks(client *eth.Client, txnDB, batchDB db.DB, log *logrus.Logger) {
+func ProcessBlocks(client *eth.Client, txnDB, batchDB db.DB, daClient da.DAClient, log *logrus.Logger) {
 	// Load last processed block
 	lastBlockBytes, _ := batchDB.Get([]byte("last_block"))
 	lastBlock := int64(1)
@@ -96,9 +106,9 @@ func ProcessBlocks(client *eth.Client, txnDB, batchDB db.DB, log *logrus.Logger)
 			// Create batch when full
 			if len(txBuffer) >= 128 {
 				log.Infof("Creating batch #%d with 128 txns", batchNo)
-				batch := CreateBatch(client, batchDB, batchNo, txBuffer[:128], traceBuffer[:128], totalGas, timestamp, log)
-				log.Debugf("Batch #%d data: TxCount=%d, PrevHash=%s, CurrentHash=%s, Gas=%d, Time=%d",
-					batch.BatchNo, len(batch.Transactions), batch.PrevMerkleHash, batch.CurrentMerkleHash, batch.Metadata.TotalGasUsed, batch.Metadata.Timestamp)
+				batch := CreateBatch(client, batchDB, daClient, batchNo, txBuffer[:128], traceBuffer[:128], totalGas, timestamp, log)
+				log.Debugf("Batch #%d data: TxCount=%d, PrevHash=%s, BatchHash=%s, PreStateRoot=%s, PostStateRoot=%s, Commitment=%s,n DAProvider=%s , DACommitment=%s, Gas=%d, Time=%d",
+					batch.BatchNo, len(batch.Transactions), batch.PrevMerkleHash, batch.CurrentMerkleHash, batch.PreviousStateRoot, batch.CurrentStateRoot, batch.Commitment, batch.DAProvider, batch.DACommitment, batch.Metadata.TotalGasUsed, batch.Metadata.Timestamp)
 				SaveBatch(batchDB, batch, log)
 				batchNo++
 				txBuffer = txBuffer[128:]
@@ -112,7 +122,7 @@ func ProcessBlocks(client *eth.Client, txnDB, batchDB db.DB, log *logrus.Logger)
 					Transactions:    txBuffer,
 					ExecutionTraces: traceBuffer,
 					BatchNo:         batchNo,
-					Metadata:        BatchMetadata{TotalGasUsed: totalGas, Timestamp: timestamp},
+					Metadata:        BatchMetadata{TotalGasUsed: totalGas, Timestamp: timestamp, StationID: "station-1"}, //TODO add station id from config
 				}
 				partialBytes, _ := json.Marshal(partial)
 				batchDB.Put([]byte("partial_batch"), partialBytes)
@@ -136,7 +146,6 @@ func ProcessBlocks(client *eth.Client, txnDB, batchDB db.DB, log *logrus.Logger)
 			continue
 		}
 
-		log.Infof("Indexing block %d", lastBlock)
 		block, err := client.Eth.BlockByNumber(context.Background(), big.NewInt(lastBlock))
 		if err != nil {
 			log.Warnf("Failed to fetch block %d: %v, retrying every 5s", lastBlock, err)
@@ -151,16 +160,15 @@ func ProcessBlocks(client *eth.Client, txnDB, batchDB db.DB, log *logrus.Logger)
 			continue
 		}
 
-		// Debug: Print block data
-		log.Debugf("Block %d data: Hash=%s, TxCount=%d, Time=%d, GasLimit=%d",
-			block.Number().Int64(), block.Hash().Hex(), len(block.Transactions()), block.Time(), block.GasLimit())
-
 		txns := block.Transactions()
-		log.Infof("Block %d has %d transactions", lastBlock, len(txns))
 
 		for _, tx := range txns {
 			txHex, _ := rlp.EncodeToBytes(tx)
 			txStr := hex.EncodeToString(txHex)
+
+			// Submit to Celestia DA before saving locally
+
+			// Save to local DB
 			txnDB.Put([]byte("tx_"+tx.Hash().Hex()), []byte(txStr))
 
 			var trace json.RawMessage
@@ -184,32 +192,130 @@ func ProcessBlocks(client *eth.Client, txnDB, batchDB db.DB, log *logrus.Logger)
 	}
 }
 
-// CreateBatch constructs a new batch with state computation
-func CreateBatch(client *eth.Client, batchDB db.DB, batchNo int, txns, traces []string, gas uint64, timestamp int64, log *logrus.Logger) Batch {
+// ComputeStateRoots computes the pre- and post-state roots for a batch
+func ComputeStateRoots(client *eth.Client, txns []string, blockNumber *big.Int, log *logrus.Logger) (preStateRoot, postStateRoot string, err error) {
+	block, err := client.Eth.BlockByNumber(context.Background(), blockNumber)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to fetch block %s: %v", blockNumber.String(), err)
+	}
+	preStateRoot = block.Root().Hex()
+	log.Debugf("Pre-state root for block %s: %s", blockNumber.String(), preStateRoot)
+
+	latestBlock, err := client.Eth.BlockByNumber(context.Background(), nil)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to fetch latest block: %v", err)
+	}
+	postStateRoot = latestBlock.Root().Hex()
+	log.Debugf("Post-state root (simulated) for batch: %s", postStateRoot)
+
+	return preStateRoot, postStateRoot, nil
+}
+
+// ComputeBatchHash computes the hash of the transaction Merkle root and post-state root
+func ComputeBatchHash(txMerkleRoot, postStateRoot string, log *logrus.Logger) string {
+	txMerkleRoot = strings.TrimPrefix(txMerkleRoot, "0x")
+	postStateRoot = strings.TrimPrefix(postStateRoot, "0x")
+
+	txRootBytes, err := hex.DecodeString(txMerkleRoot)
+	if err != nil {
+		log.Errorf("Failed to decode tx Merkle root: %v", err)
+		return "0x0"
+	}
+	stateRootBytes, err := hex.DecodeString(postStateRoot)
+	if err != nil {
+		log.Errorf("Failed to decode state root: %v", err)
+		return "0x0"
+	}
+
+	combined := append(txRootBytes, stateRootBytes...)
+	hash := sha256.Sum256(combined)
+	return "0x" + hex.EncodeToString(hash[:])
+}
+
+// ComputeBatchCommitment creates a commitment from batch hash and metadata
+func ComputeBatchCommitment(batchHash string, metadata BatchMetadata, log *logrus.Logger) string {
+	metadataBytes, err := json.Marshal(metadata)
+	if err != nil {
+		log.Errorf("Failed to marshal metadata: %v", err)
+		return "0x0"
+	}
+
+	batchHash = strings.TrimPrefix(batchHash, "0x")
+	batchHashBytes, err := hex.DecodeString(batchHash)
+	if err != nil {
+		log.Errorf("Failed to decode batch hash: %v", err)
+		return "0x0"
+	}
+
+	combined := append(batchHashBytes, metadataBytes...)
+	hash := sha256.Sum256(combined)
+	return "0x" + hex.EncodeToString(hash[:])
+}
+
+// CreateBatch constructs a new batch with state computation, DA commitment, and batch commitment
+func CreateBatch(client *eth.Client, batchDB db.DB, daClient da.DAClient, batchNo int, txns, traces []string, gas uint64, timestamp int64, log *logrus.Logger) Batch {
 	prevHashBytes, _ := batchDB.Get([]byte(fmt.Sprintf("batch_%d_hash", batchNo-1)))
 	prevHash := string(prevHashBytes)
 	if batchNo == 1 {
 		prevHash = "0x0000000000050521071107"
 	}
 
-	currentHash := computeMerkleRoot(txns)
-	
+	// Compute transaction Merkle root
+	txMerkleRoot := computeMerkleRoot(txns)
 
-	// Note: We’re not passing block here anymore, so no state computation for now
-	// If needed, we’ll need to fetch the latest block in this goroutine
+	// Fetch state roots
+	preStateRoot, postStateRoot, err := ComputeStateRoots(client, txns, big.NewInt(int64(batchNo)), log)
+	if err != nil {
+		log.Errorf("Failed to compute state roots for batch #%d: %v", batchNo, err)
+		postStateRoot = "0x0"
+	}
+	
+	// Compute batch hash (transactions + state root)
+	batchHash := ComputeBatchHash(txMerkleRoot, postStateRoot, log)
+
+	// Create metadata
+	metadata := BatchMetadata{TotalGasUsed: gas, Timestamp: timestamp, StationID: "station-1"} //TODO add station id from config
+
+	// Compute batch commitment (batch hash + metadata)
+	commitment := ComputeBatchCommitment(batchHash, metadata, log)
+
+	// Submit batch transaction data to Celestia DA
+	txData := []byte(strings.Join(txns, "")) //
+	//  Simple concatenation; adjust encoding as needed
+	compressedBatchData, err := compressData(txData)
+	if err != nil {
+		log.Errorf("Failed to compress batch #%d tx data: %v", batchNo, err)
+		compressedBatchData = []byte{}
+	}
+	daHash, daCommitment, err := daClient.SubmitToDA(compressedBatchData, log)
+	if err != nil {
+		log.Errorf("Failed to submit batch #%d tx data to Celestia DA: %v", batchNo, err)
+		daCommitment = "0x0"
+	}
+	var daType string
+	switch daClient.(type) {
+	case *da.CelestiaClient:
+		daType = "Celestia"
+	case *da.AvailClient:
+		daType = "Avail"
+	default:
+		daType = "Unknown"
+	}
+
 	return Batch{
 		Transactions:      txns,
 		ExecutionTraces:   traces,
 		PrevMerkleHash:    prevHash,
-		CurrentMerkleHash: currentHash,
+		CurrentMerkleHash: batchHash,
+		PreviousStateRoot: preStateRoot,
+		CurrentStateRoot:  postStateRoot,
 		BatchNo:           batchNo,
-		Metadata:          BatchMetadata{TotalGasUsed: gas, Timestamp: timestamp},
+		Metadata:          metadata,
+		Commitment:        commitment,
+		DAProvider:        daType,
+		DAHash:            daHash,
+		DACommitment:      daCommitment,
 	}
-}
-
-// TODO ComputeStateRoot computes the state root of a batch
-func ComputeStateRoot(currentMerkleRoot string, batch Batch, log *logrus.Logger) string {
-	return "0x0"
 }
 
 // computeMerkleRoot calculates the SHA-256 Merkle root of a transaction list
@@ -235,7 +341,19 @@ func computeMerkleRoot(txns []string) string {
 		}
 		hashes = temp
 	}
-	return hex.EncodeToString(hashes[0])
+	return "0x" + hex.EncodeToString(hashes[0])
+}
+
+func compressData(data []byte) ([]byte, error) {
+	var buf bytes.Buffer
+	gz := gzip.NewWriter(&buf)
+	if _, err := gz.Write(data); err != nil {
+		return nil, err
+	}
+	if err := gz.Close(); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }
 
 // SaveBatch stores a batch in the batch database
@@ -249,7 +367,7 @@ func SaveBatch(db db.DB, batch Batch, log *logrus.Logger) {
 	if err := db.Put(key, batchBytes); err != nil {
 		log.Errorf("Failed to save batch #%d: %v", batch.BatchNo, err)
 	} else {
-		log.Infof("Saved batch #%d to batchDB", batch.BatchNo)
+		log.Infof("Saved batch #%d to batchDB with DA commitment: %s", batch.BatchNo, batch.DACommitment)
 	}
 	db.Put([]byte(fmt.Sprintf("batch_%d_hash", batch.BatchNo)), []byte(batch.CurrentMerkleHash))
 }
