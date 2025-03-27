@@ -1,6 +1,8 @@
 package main
 
 import (
+	"time"
+
 	"github.com/airchains-network/trusted-sequencer/batch"
 	"github.com/airchains-network/trusted-sequencer/batch/da"
 	"github.com/airchains-network/trusted-sequencer/config"
@@ -41,21 +43,29 @@ func main() {
 		log.Fatalf("Failed to initialize Geth client: %v", err)
 	}
 
+	// Replace the existing DA initialization with retry logic
 	var daClient da.DAClient
-	if cfg.DA.Type == "celestia" {
-		log.Info("Using Celestia for DA submission")
-		daClient, err = da.NewCelestiaClient(cfg.DA.NodeAddr, cfg.DA.AuthToken, cfg.DA.Namespace, log)
-		if err != nil {
-			log.Fatalf("Failed to initialize Celestia client: %v", err)
+
+	log.Info("Initializing DA client...")
+	for {
+		if cfg.DA.Type == "celestia" {
+			log.Info("Attempting to connect to Celestia...")
+			daClient, err = da.NewCelestiaClient(cfg.DA.NodeAddr, cfg.DA.AuthToken, cfg.DA.Namespace, log)
+		} else if cfg.DA.Type == "avail" {
+			log.Info("Attempting to connect to Avail...")
+			daClient, err = da.NewAvailClient(cfg.DA.NodeAddr, cfg.DA.AuthToken, cfg.DA.Namespace, log)
+		} else {
+			log.Fatalf("Unsupported DA submission type: %s", cfg.DA.Type)
 		}
-	} else if cfg.DA.Type == "avail" {
-		log.Info("Using Avail for DA submission")
-		daClient, err = da.NewAvailClient(cfg.DA.NodeAddr, cfg.DA.AuthToken, cfg.DA.Namespace, log)
-		if err != nil {
-			log.Fatalf("Failed to initialize Avail client: %v", err)
+
+		if err == nil {
+			log.Infof("Successfully connected to %s DA layer", cfg.DA.Type)
+			break
 		}
-	} else {
-		log.Fatalf("Unsupported DA submission type: %s", cfg.DA.Type)
+
+		log.Warnf("Failed to initialize %s client: %v", cfg.DA.Type, err)
+		log.Info("Retrying in 5 seconds...")
+		time.Sleep(5 * time.Second)
 	}
 
 	// Start transaction pool

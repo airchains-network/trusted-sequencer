@@ -269,7 +269,7 @@ func CreateBatch(client *eth.Client, batchDB db.DB, daClient da.DAClient, batchN
 		log.Errorf("Failed to compute state roots for batch #%d: %v", batchNo, err)
 		postStateRoot = "0x0"
 	}
-	
+
 	// Compute batch hash (transactions + state root)
 	batchHash := ComputeBatchHash(txMerkleRoot, postStateRoot, log)
 
