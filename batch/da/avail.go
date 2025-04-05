@@ -34,7 +34,7 @@ func NewAvailClient(nodeAddr, authToken, namespace string, log *logrus.Logger) (
 }
 
 // SubmitToDA submits transaction data to Avail and retries if it fails
-func (c *AvailClient) SubmitToDA(txData []byte, log *logrus.Logger) (string, string, error) {
+func (c *AvailClient) SubmitToDA(txData []byte, log *logrus.Logger) (string, string, string, error) {
 	hash := sha256.Sum256(txData)
 	commitment := hex.EncodeToString(hash[:])
 
@@ -64,6 +64,6 @@ func (c *AvailClient) SubmitToDA(txData []byte, log *logrus.Logger) (string, str
 		log.Infof("Successfully submitted to Avail! Tx Hash: %s, Block Hash: %s, Block Number: %d, Tx Index: %d",
 			res.TxHash.ToHexWith0x(), res.BlockHash.ToHexWith0x(), res.BlockNumber, res.TxIndex)
 
-		return fmt.Sprintf("%d", res.BlockNumber), commitment, nil
+		return fmt.Sprintf("%d", res.BlockNumber), res.TxHash.ToHexWith0x(), commitment, nil
 	}
 }

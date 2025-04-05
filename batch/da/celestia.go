@@ -41,10 +41,10 @@ func (c *CelestiaClient) Close() {
 
 // SubmitToDA submits transaction data to Celestia and returns a commitment
 // SubmitToCelestiaDA submits transaction data to Celestia and retries indefinitely if it fails
-func (c *CelestiaClient) SubmitToDA(txData []byte, log *logrus.Logger) (string, string, error) {
+func (c *CelestiaClient) SubmitToDA(txData []byte, log *logrus.Logger) (string, string, string, error) {
 	blobData, err := blob.NewBlobV0(c.Namespace, txData)
 	if err != nil {
-		return "", "", fmt.Errorf("failed to create Celestia blob: %v", err)
+		return "", "", "", fmt.Errorf("failed to create Celestia blob: %v", err)
 	}
 
 	var height uint64
@@ -60,7 +60,7 @@ func (c *CelestiaClient) SubmitToDA(txData []byte, log *logrus.Logger) (string, 
 		if err == nil {
 			commitment = hex.EncodeToString(blobData.Commitment)
 			log.Infof("Successfully submitted to Celestia at height %d, commitment: %s", height, commitment)
-			return fmt.Sprintf("%d", height), commitment, nil
+			return fmt.Sprintf("%d", height), "", commitment, nil
 		}
 
 		log.Errorf("Celestia submission failed: %v. Retrying in %s...", err, backoff)

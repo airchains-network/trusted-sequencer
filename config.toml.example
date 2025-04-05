@@ -1,14 +1,40 @@
+# Trusted Sequencer Configuration
+# This is an example configuration file. Copy this to config.toml and modify as needed.
+
 [general]
+# Ethereum RPC endpoint for connecting to the Ethereum network
 geth_rpc_url = "http://127.0.0.1:8545"
+
+# Port for the proxy server to listen on
 proxy_port = ":8080"
 
 [database]
+# Path to store transaction database
 txn_db_path = "./data/txn_db"
+
+# Path to store batch database
 batch_db_path = "./data/batch_db"
 
+# Path to store state database
+state_path = "./data/state_db"
+
 [da]
-type = "avail"  # "avail" or "celestia"
-node_addr = "" # url of node_addr
-auth_token = "" 
+# Data Availability layer type (avail or celestia)
+type = "avail"
+
+# Node address for the DA layer
+node_addr = "http://localhost:26657"
+
+# Authentication token for the DA layer
+auth_token = "your_auth_token_here"
+
+# Namespace for the DA layer
 namespace = "airchains"
-station_namespace = "station-1"
+
+[rollup]
+# Rollup namespace
+namespace = "airchains-rollup-69420"
+
+[genesis]
+# Path to genesis file
+file_path = "./genesis.json"

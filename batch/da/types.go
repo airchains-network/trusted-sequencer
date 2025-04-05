@@ -10,7 +10,7 @@ import (
 
 // DAClient defines a common interface for DA submissions
 type DAClient interface {
-	SubmitToDA(txData []byte, log *logrus.Logger) (daHash, daCommitment string, err error)
+	SubmitToDA(txData []byte, log *logrus.Logger) (daHash, daCommitment, daTxHash string, err error)
 }
 
 // AvailClient wraps the Avail SDK client for DA submissions

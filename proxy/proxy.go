@@ -271,7 +271,8 @@ func handleRPC(c *gin.Context, client *eth.Client, txnDB, batchDB db.DB, pool *p
 			CurrentStateRoot  string                `json:"current_state_root"`
 			DAProviddr        string                `json:"da_provider"`
 			DACommitment      string                `json:"da_commitment"`
-			DAHash            string                `json:"da_hash"`
+			DABlockHash       string                `json:"da_block_hash"`
+			DATxHash          string                `json:"da_tx_hash"`
 			BatchNo           int                   `json:"batch_no"`
 			Metadata          batch.BatchMetadata   `json:"metadata"`
 			Commitment        string                `json:"commitment"`
@@ -286,7 +287,8 @@ func handleRPC(c *gin.Context, client *eth.Client, txnDB, batchDB db.DB, pool *p
 			CurrentStateRoot:  b.CurrentStateRoot,
 			DAProviddr:        b.DAProvider,
 			DACommitment:      b.DACommitment,
-			DAHash:            b.DAHash,
+			DABlockHash:       b.DABlockHash,
+			DATxHash:          b.DATxHash,
 			BatchNo:           b.BatchNo,
 			Metadata:          b.Metadata,
 			Commitment:        b.Commitment,
@@ -355,7 +357,8 @@ func handleRPC(c *gin.Context, client *eth.Client, txnDB, batchDB db.DB, pool *p
 			CurrentStateRoot  string                `json:"current_state_root"`
 			DAProviddr        string                `json:"da_provider"`
 			DACommitment      string                `json:"da_commitment"`
-			DAHash            string                `json:"da_hash"`
+			DABlockHash       string                `json:"da_block_hash"`
+			DATxHash          string                `json:"da_tx_hash"`
 			BatchNo           int                   `json:"batch_no"`
 			Metadata          batch.BatchMetadata   `json:"metadata"`
 			Commitment        string                `json:"commitment"`
@@ -370,7 +373,8 @@ func handleRPC(c *gin.Context, client *eth.Client, txnDB, batchDB db.DB, pool *p
 			CurrentStateRoot:  b.CurrentStateRoot,
 			DAProviddr:        b.DAProvider,
 			DACommitment:      b.DACommitment,
-			DAHash:            b.DAHash,
+			DABlockHash:       b.DABlockHash,
+			DATxHash:          b.DATxHash,
 			BatchNo:           b.BatchNo,
 			Metadata:          b.Metadata,
 			Commitment:        b.Commitment,

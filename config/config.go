@@ -12,6 +12,8 @@ type Config struct {
 	General  GeneralConfig  `toml:"general"`
 	Database DatabaseConfig `toml:"database"`
 	DA       DAConfig       `toml:"da"`
+	Genesis  GenesisConfig  `toml:"genesis"`
+	Rollup   RollupConfig   `toml:"rollup"`
 }
 
 // GeneralConfig holds general settings
@@ -24,15 +26,23 @@ type GeneralConfig struct {
 type DatabaseConfig struct {
 	TxnDBPath   string `toml:"txn_db_path"`
 	BatchDBPath string `toml:"batch_db_path"`
+	StatePath   string `toml:"state_path"`
 }
 
 // DAConfig holds DA (Data Availability) settings
 type DAConfig struct {
-	Type             string `toml:"type"` // "celestia" or "avail"
-	NodeAddr         string `toml:"node_addr"`
-	AuthToken        string `toml:"auth_token"`
-	Namespace        string `toml:"namespace"`
-	StationNamespace string `toml:"station_namespace"`
+	Type      string `toml:"type"` // "celestia" or "avail"
+	NodeAddr  string `toml:"node_addr"`
+	AuthToken string `toml:"auth_token"`
+	Namespace string `toml:"namespace"`
+}
+
+type RollupConfig struct {
+	Namespace string `toml:"namespace"`
+}
+
+type GenesisConfig struct {
+	FilePath string `toml:"file_path"`
 }
 
 // LoadConfig reads from config.toml and returns Config struct
