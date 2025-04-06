@@ -61,7 +61,7 @@ auth_token = "your_auth_token_here"    # DA layer authentication token
 namespace = "airchains"                # DA layer namespace
 
 [rollup]
-namespace = "airchains-rollup-69420"   # Rollup namespace
+namespace = "airchains-rollup-69420"   # Rollup ID
 
 [genesis]
 file_path = "./genesis.json"           # Path to genesis file

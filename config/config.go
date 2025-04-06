@@ -38,7 +38,7 @@ type DAConfig struct {
 }
 
 type RollupConfig struct {
-	Namespace string `toml:"namespace"`
+	RollupID string `toml:"rollup_id"` // TODO Change this to RollupID
 }
 
 type GenesisConfig struct {

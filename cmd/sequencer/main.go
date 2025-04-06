@@ -112,7 +112,7 @@ func main() {
 
 	log.Infof("Starting from block %d", lastBlock)
 
-	go batch.ProcessBlocks(client, txnDB, batchDB, daClient, evmState, vmProcessor, cfg.Rollup.Namespace, log)
+	go batch.ProcessBlocks(client, txnDB, batchDB, daClient, evmState, vmProcessor, cfg.Rollup.RollupID, log)
 
 	// Start proxy server
 	log.Infof("Starting Trusted Sequencer on %s...", cfg.General.ProxyPort)

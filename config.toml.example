@@ -32,7 +32,7 @@ auth_token = "your_auth_token_here"
 namespace = "airchains"
 
 [rollup]
-# Rollup namespace
+# Rollup Id
 namespace = "airchains-rollup-69420"
 
 [genesis]

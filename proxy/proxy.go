@@ -64,7 +64,7 @@ func decodeTransaction(txHex string, log *logrus.Logger) *DecodedTransaction {
 			log.Errorf("Failed to get sender for TypedTx: %v", err)
 			return nil // Fixed: Return nil on error
 		}
-		sender = from.Hex() // Fixed: Use Hex() instead of String()
+		sender = from.Hex()
 	}
 
 	to := ""
@@ -217,7 +217,10 @@ func handleRPC(c *gin.Context, client *eth.Client, txnDB, batchDB db.DB, pool *p
 			log.Infof("Saved transaction %s to txnDB", txHex[:10])
 		}
 		pool.AddTx(txHex)
-		resp.Result = "queued"
+
+		// Return the transaction hash in the exact format Ethereum expects
+		txHash := "0x" + tx.Hash().Hex()[2:] // Ensure it starts with 0x
+		resp.Result = txHash
 		c.JSON(http.StatusOK, resp)
 
 	case "getLatestBatch":
