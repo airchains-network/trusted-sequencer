@@ -2,6 +2,8 @@ package main
 
 import (
 	"math/big"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/airchains-network/trusted-sequencer/batch"
@@ -25,10 +27,25 @@ func main() {
 	})
 	log.SetLevel(logrus.DebugLevel)
 
-	// Load configuration from config.toml
-	cfg, err := config.LoadConfig("config.toml")
+	// Get user's home directory
+	home, err := os.UserHomeDir()
+	if err != nil {
+		log.Fatalf("Failed to get home directory: %v", err)
+	}
+
+	// Default config path
+	configPath := filepath.Join(home, ".trusted-sequencer", "config.toml")
+	log.Infof("Loading config from: %s", configPath)
+
+	// Load configuration from default path
+	cfg, err := config.LoadConfig(configPath)
 	if err != nil {
 		log.Fatalf("Failed to load config: %v", err)
+	}
+
+	// Check if genesis.json exists
+	if _, err := os.Stat(cfg.Genesis.FilePath); os.IsNotExist(err) {
+		log.Fatalf("Genesis file not found at %s. Please create a genesis.json file before starting the sequencer.", cfg.Genesis.FilePath)
 	}
 
 	// Initialize databases
@@ -45,9 +62,8 @@ func main() {
 		log.Fatalf("Failed to initialize Geth client: %v", err)
 	}
 
-	// Replace the existing DA initialization with retry logic
+	// Initialize DA client with retry logic
 	var daClient da.DAClient
-
 	log.Info("Initializing DA client...")
 	for {
 		if cfg.DA.Type == "celestia" {
@@ -74,6 +90,7 @@ func main() {
 	txPool := pool.NewTxPool()
 	go txPool.Process(client, txnDB, log)
 
+	// Initialize state
 	evmState, err := state.NewEVMState(cfg.Database.StatePath)
 	if err != nil {
 		log.Fatalf("Failed to initialize state: %v", err)
@@ -82,6 +99,7 @@ func main() {
 
 	vmProcessor := state.NewProcessor(evmState, eth.NewRpcClient(cfg.General.GethRPCURL), log)
 
+	// Get last processed block
 	lastBlockBytes, err := batchDB.Get([]byte("last_block"))
 	if err != nil {
 		log.Warnf("Failed to get last block from database: %v, starting from block 1", err)
@@ -98,6 +116,7 @@ func main() {
 		}
 	}
 
+	// Handle genesis if starting from block 0
 	if lastBlock == 0 {
 		genesisHash, err := vmProcessor.LoadGenesis(cfg.Genesis.FilePath)
 		if err != nil {
@@ -112,7 +131,8 @@ func main() {
 
 	log.Infof("Starting from block %d", lastBlock)
 
-	go batch.ProcessBlocks(client, txnDB, batchDB, daClient, evmState, vmProcessor, cfg.Rollup.Namespace, log)
+	// Start block processing
+	go batch.ProcessBlocks(client, txnDB, batchDB, daClient, evmState, vmProcessor, cfg.Rollup.RollupID, log)
 
 	// Start proxy server
 	log.Infof("Starting Trusted Sequencer on %s...", cfg.General.ProxyPort)
