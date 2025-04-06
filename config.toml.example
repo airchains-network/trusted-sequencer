@@ -10,13 +10,13 @@ proxy_port = ":8080"
 
 [database]
 # Path to store transaction database
-txn_db_path = "./data/txn_db"
+txn_db_path = "~/.trusted-sequencer/data/txn_db"
 
 # Path to store batch database
-batch_db_path = "./data/batch_db"
+batch_db_path = "~/.trusted-sequencer/data/batch_db"
 
 # Path to store state database
-state_path = "./data/state_db"
+state_path = "~/.trusted-sequencer/data/state_db"
 
 [da]
 # Data Availability layer type (avail or celestia)
