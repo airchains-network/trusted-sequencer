@@ -59,9 +59,74 @@ func expandHomeDir(path string) (string, error) {
 	return filepath.Join(home, path[2:]), nil
 }
 
-// LoadConfig reads from config.toml and returns Config struct
+// DefaultConfig returns a Config with default values
+func DefaultConfig() Config {
+	home, _ := os.UserHomeDir()
+	basePath := filepath.Join(home, ".trusted-sequencer")
+
+	return Config{
+		General: GeneralConfig{
+			GethRPCURL: "http://127.0.0.1:8545",
+			ProxyPort:  ":8080",
+		},
+		Database: DatabaseConfig{
+			TxnDBPath:   filepath.Join(basePath, "data/txn_db"),
+			BatchDBPath: filepath.Join(basePath, "data/batch_db"),
+			StatePath:   filepath.Join(basePath, "data/state_db"),
+		},
+		DA: DAConfig{
+			Type:      "avail",
+			NodeAddr:  "http://localhost:26657",
+			AuthToken: "dummy-auth-token",
+			Namespace: "airchains",
+		},
+		Rollup: RollupConfig{
+			RollupID: "airchains-rollup-69420",
+		},
+		Genesis: GenesisConfig{
+			FilePath: filepath.Join(basePath, "genesis.json"),
+		},
+	}
+}
+
+// InitConfig creates a new config file with default values
+func InitConfig(path string) error {
+	// Create directory if it doesn't exist
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("failed to create config directory: %v", err)
+	}
+
+	// Create default config
+	cfg := DefaultConfig()
+
+	// Marshal to TOML
+	data, err := toml.Marshal(cfg)
+	if err != nil {
+		return fmt.Errorf("failed to marshal default config: %v", err)
+	}
+
+	// Write to file
+	if err := os.WriteFile(path, data, 0644); err != nil {
+		return fmt.Errorf("failed to write config file: %v", err)
+	}
+
+	return nil
+}
+
+// LoadConfig loads the config file, creating it if it doesn't exist
 func LoadConfig(path string) (Config, error) {
 	var cfg Config
+
+	// Check if config exists
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		fmt.Printf("Config file not found at %s. Creating with default values...\n", path)
+		if err := InitConfig(path); err != nil {
+			return cfg, err
+		}
+	}
+
+	// Read and parse config
 	file, err := os.ReadFile(path)
 	if err != nil {
 		return cfg, fmt.Errorf("failed to read config file: %v", err)
@@ -72,27 +137,17 @@ func LoadConfig(path string) (Config, error) {
 		return cfg, fmt.Errorf("failed to parse config file: %v", err)
 	}
 
-	// Expand home directory in database paths
-	if cfg.Database.TxnDBPath, err = expandHomeDir(cfg.Database.TxnDBPath); err != nil {
-		return cfg, err
-	}
-	if cfg.Database.BatchDBPath, err = expandHomeDir(cfg.Database.BatchDBPath); err != nil {
-		return cfg, err
-	}
-	if cfg.Database.StatePath, err = expandHomeDir(cfg.Database.StatePath); err != nil {
-		return cfg, err
-	}
-
-	// Create directories if they don't exist
+	// Create data directories
 	dirs := []string{
 		cfg.Database.TxnDBPath,
 		cfg.Database.BatchDBPath,
 		cfg.Database.StatePath,
+		filepath.Dir(cfg.Genesis.FilePath),
 	}
 
 	for _, dir := range dirs {
 		if err := os.MkdirAll(dir, 0755); err != nil {
-			return cfg, err
+			return cfg, fmt.Errorf("failed to create directory %s: %v", dir, err)
 		}
 	}
 
