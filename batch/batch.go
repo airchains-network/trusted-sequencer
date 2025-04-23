@@ -277,12 +277,7 @@ func CreateBatch(client *eth.Client, batchDB db.DB, daClient da.DAClient, batchN
 	txMerkleRoot := computeMerkleRoot(txns)
 
 	// Fetch state roots
-	// preStateRoot, _, err := ComputeStateRoots(client, txns, big.NewInt(int64(batchNo)), log)
-	// if err != nil {
-	// 	log.Errorf("Failed to compute state roots for batch #%d: %v", batchNo, err)
-
-	// }
-	// Get preStateRoot from database
+	
 	preStateRootBytes, _ := batchDB.Get([]byte(fmt.Sprintf("state_%d", batchNo-1)))
 	preStateRoot := string(preStateRootBytes)
 
@@ -303,7 +298,7 @@ func CreateBatch(client *eth.Client, batchDB db.DB, daClient da.DAClient, batchN
 
 	// Submit batch transaction data to Celestia DA
 	txData := []byte(strings.Join(txns, "")) //
-	//  Simple concatenation; adjust encoding as needed
+	
 	compressedBatchData, err := compressData(txData)
 	if err != nil {
 		log.Errorf("Failed to compress batch #%d tx data: %v", batchNo, err)

@@ -75,13 +75,13 @@ func DefaultConfig() Config {
 			StatePath:   filepath.Join(basePath, "data/state_db"),
 		},
 		DA: DAConfig{
-			Type:      "avail",
-			NodeAddr:  "http://localhost:26657",
-			AuthToken: "dummy-auth-token",
-			Namespace: "airchains",
+			Type:      "", // Will be set by user
+			NodeAddr:  "", // Will be set by user
+			AuthToken: "", // Will be set by user
+			Namespace: "", // Will be set by user
 		},
 		Rollup: RollupConfig{
-			RollupID: "airchains-rollup-69420",
+			RollupID: "", // Will be set by user
 		},
 		Genesis: GenesisConfig{
 			FilePath: filepath.Join(basePath, "genesis.json"),
@@ -152,4 +152,18 @@ func LoadConfig(path string) (Config, error) {
 	}
 
 	return cfg, nil
+}
+
+// Save saves the configuration to a file
+func (c *Config) Save(path string) error {
+	data, err := toml.Marshal(c)
+	if err != nil {
+		return fmt.Errorf("failed to marshal config: %v", err)
+	}
+
+	if err := os.WriteFile(path, data, 0644); err != nil {
+		return fmt.Errorf("failed to write config file: %v", err)
+	}
+
+	return nil
 }
