@@ -20,8 +20,10 @@ type Config struct {
 
 // GeneralConfig holds general settings
 type GeneralConfig struct {
-	GethRPCURL string `toml:"geth_rpc_url"`
-	ProxyPort  string `toml:"proxy_port"`
+	GethRPCURL    string `toml:"geth_rpc_url"`
+	GethWSURL     string `toml:"geth_ws_url"`
+	RPCPort       string `toml:"rpc_port"`
+	WebSocketPort string `toml:"ws_port"`
 }
 
 // DatabaseConfig holds database paths
@@ -66,8 +68,10 @@ func DefaultConfig() Config {
 
 	return Config{
 		General: GeneralConfig{
-			GethRPCURL: "http://127.0.0.1:8545",
-			ProxyPort:  ":8080",
+			GethRPCURL:    "http://127.0.0.1:8545",
+			GethWSURL:     "ws://127.0.0.1:8546",
+			RPCPort:       ":11111",
+			WebSocketPort: ":11112",
 		},
 		Database: DatabaseConfig{
 			TxnDBPath:   filepath.Join(basePath, "data/txn_db"),

@@ -33,7 +33,9 @@ func init() {
 
 	// General configuration flags
 	InitCmd.Flags().String("geth.rpc-url", "http://127.0.0.1:8545", "Geth RPC URL")
-	InitCmd.Flags().String("proxy.port", ":11111", "Proxy server port")
+	InitCmd.Flags().String("geth.ws-url", "ws://127.0.0.1:8546", "Geth WebSocket URL")
+	InitCmd.Flags().String("rpc.port", ":11111", "RPC server port")
+	InitCmd.Flags().String("ws.port", ":11112", "WebSocket server port")
 
 	// Mark required flags
 	InitCmd.MarkFlagRequired("da.type")
@@ -51,7 +53,9 @@ func initCommand(cmd *cobra.Command) error {
 	namespace, _ := cmd.Flags().GetString("da.namespace")
 	rollupID, _ := cmd.Flags().GetString("rollup.id")
 	gethRPCURL, _ := cmd.Flags().GetString("geth.rpc-url")
-	proxyPort, _ := cmd.Flags().GetString("proxy.port")
+	gethWSURL, _ := cmd.Flags().GetString("geth.ws-url")
+	rpcPort, _ := cmd.Flags().GetString("rpc.port")
+	wsPort, _ := cmd.Flags().GetString("ws.port")
 
 	log := logrus.New()
 	log.SetFormatter(&logrus.TextFormatter{
@@ -100,7 +104,9 @@ func initCommand(cmd *cobra.Command) error {
 	cfg.DA.Namespace = namespace
 	cfg.Rollup.RollupID = rollupID
 	cfg.General.GethRPCURL = gethRPCURL
-	cfg.General.ProxyPort = proxyPort
+	cfg.General.GethWSURL = gethWSURL
+	cfg.General.RPCPort = rpcPort
+	cfg.General.WebSocketPort = wsPort
 
 	// Save config file
 	configPath := filepath.Join(sequencerDir, "config.toml")
@@ -116,7 +122,9 @@ func initCommand(cmd *cobra.Command) error {
 	fmt.Printf("Namespace: %s\n", cfg.DA.Namespace)
 	fmt.Printf("Rollup ID: %s\n", cfg.Rollup.RollupID)
 	fmt.Printf("Geth RPC URL: %s\n", cfg.General.GethRPCURL)
-	fmt.Printf("Proxy Port: %s\n", cfg.General.ProxyPort)
+	fmt.Printf("Geth WebSocket URL: %s\n", cfg.General.GethWSURL)
+	fmt.Printf("RPC Port: %s\n", cfg.General.RPCPort)
+	fmt.Printf("WebSocket Port: %s\n", cfg.General.WebSocketPort)
 	fmt.Printf("Config File: %s\n", configPath)
 
 	log.Info("\nInitialization completed successfully!")
