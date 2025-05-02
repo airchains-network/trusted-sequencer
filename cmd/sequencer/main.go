@@ -19,7 +19,7 @@ It supports integration with various data availability layers like Avail and Cel
 	// Add commands
 	rootCmd.AddCommand(commands.InitCmd)
 	rootCmd.AddCommand(commands.StartCmd)
-
+	rootCmd.AddCommand(commands.CreateAccountCmd)
 	// Execute root command
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)

@@ -49,12 +49,29 @@ func startCommand() error {
 		return fmt.Errorf("genesis.json not found at %s", genesisPath)
 	}
 
+	// Check if wallet exists
+	keysDir := filepath.Join(home, ".trusted-sequencer", "keys")
+	if _, err := os.Stat(keysDir); os.IsNotExist(err) {
+		return fmt.Errorf("no wallet found. Please create a wallet using 'trusted-sequencer create-account <name>'")
+	}
+
+	// Check if keys directory is empty
+	entries, err := os.ReadDir(keysDir)
+	if err != nil {
+		return fmt.Errorf("failed to read keys directory: %v", err)
+	}
+	if len(entries) == 0 {
+		return fmt.Errorf("no wallet found. Please create a wallet using 'trusted-sequencer create-account <name>'")
+	}
+
 	// TODO: Implement the actual sequencer start logic here
 	log.Info("Starting trusted sequencer...")
 	log.Infof("DA Layer: %s", cfg.DA.Type)
 	log.Infof("Node Address: %s", cfg.DA.NodeAddr)
 	log.Infof("Namespace: %s", cfg.DA.Namespace)
 	log.Infof("Rollup ID: %s", cfg.Rollup.RollupID)
+	log.Infof("Junction API: %s", cfg.Junction.API)
+	log.Infof("Junction RPC: %s", cfg.Junction.RPC)
 
 	return nil
 }

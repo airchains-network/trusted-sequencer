@@ -124,6 +124,7 @@ func ProcessBlocks(client *eth.Client, txnDB, batchDB db.DB, daClient da.DAClien
 					batch.BatchNo, len(batch.Transactions), batch.PrevMerkleHash, batch.CurrentMerkleHash, batch.PreviousStateRoot, batch.CurrentStateRoot, batch.Commitment, batch.DAProvider, batch.DACommitment, batch.Metadata.TotalGasUsed, batch.Metadata.Timestamp)
 				SaveBatch(batchDB, batch, log)
 				//TODO Send Batch to Rollup Relayer
+	
 				batchNo++
 				txBuffer = txBuffer[128:]
 				traceBuffer = traceBuffer[128:]

@@ -16,6 +16,8 @@ type Config struct {
 	DA       DAConfig       `toml:"da"`
 	Genesis  GenesisConfig  `toml:"genesis"`
 	Rollup   RollupConfig   `toml:"rollup"`
+	Prover   ProverConfig   `toml:"prover"`
+	Junction JunctionConfig `toml:"junction"`
 }
 
 // GeneralConfig holds general settings
@@ -47,6 +49,17 @@ type RollupConfig struct {
 
 type GenesisConfig struct {
 	FilePath string `toml:"file_path"`
+}
+
+// ProverConfig holds prover settings
+type ProverConfig struct {
+	URL string `toml:"url"`
+}
+
+// JunctionConfig holds Junction network settings
+type JunctionConfig struct {
+	API string `toml:"api"`
+	RPC string `toml:"rpc"`
 }
 
 // expandHomeDir replaces ~ with the user's home directory
@@ -89,6 +102,13 @@ func DefaultConfig() Config {
 		},
 		Genesis: GenesisConfig{
 			FilePath: filepath.Join(basePath, "genesis.json"),
+		},
+		Prover: ProverConfig{
+			URL: "", // Will be set by user
+		},
+		Junction: JunctionConfig{
+			API: "", // Will be set by user
+			RPC: "", // Will be set by user
 		},
 	}
 }

@@ -37,12 +37,22 @@ func init() {
 	InitCmd.Flags().String("rpc.port", ":11111", "RPC server port")
 	InitCmd.Flags().String("ws.port", ":11112", "WebSocket server port")
 
+	// Prover configuration flags
+	InitCmd.Flags().String("prover.url", "", "Prover URL")
+
+	// Junction configuration flags
+	InitCmd.Flags().String("junction.api", "", "Junction API URL")
+	InitCmd.Flags().String("junction.rpc", "", "Junction RPC URL")
+
 	// Mark required flags
 	InitCmd.MarkFlagRequired("da.type")
 	InitCmd.MarkFlagRequired("da.node-addr")
 	InitCmd.MarkFlagRequired("da.auth-token")
 	InitCmd.MarkFlagRequired("da.namespace")
 	InitCmd.MarkFlagRequired("rollup.id")
+	InitCmd.MarkFlagRequired("prover.url")
+	InitCmd.MarkFlagRequired("junction.api")
+	InitCmd.MarkFlagRequired("junction.rpc")
 }
 
 func initCommand(cmd *cobra.Command) error {
@@ -56,6 +66,9 @@ func initCommand(cmd *cobra.Command) error {
 	gethWSURL, _ := cmd.Flags().GetString("geth.ws-url")
 	rpcPort, _ := cmd.Flags().GetString("rpc.port")
 	wsPort, _ := cmd.Flags().GetString("ws.port")
+	proverURL, _ := cmd.Flags().GetString("prover.url")
+	junctionAPI, _ := cmd.Flags().GetString("junction.api")
+	junctionRPC, _ := cmd.Flags().GetString("junction.rpc")
 
 	log := logrus.New()
 	log.SetFormatter(&logrus.TextFormatter{
@@ -107,6 +120,9 @@ func initCommand(cmd *cobra.Command) error {
 	cfg.General.GethWSURL = gethWSURL
 	cfg.General.RPCPort = rpcPort
 	cfg.General.WebSocketPort = wsPort
+	cfg.Prover.URL = proverURL
+	cfg.Junction.API = junctionAPI
+	cfg.Junction.RPC = junctionRPC
 
 	// Save config file
 	configPath := filepath.Join(sequencerDir, "config.toml")
@@ -125,6 +141,9 @@ func initCommand(cmd *cobra.Command) error {
 	fmt.Printf("Geth WebSocket URL: %s\n", cfg.General.GethWSURL)
 	fmt.Printf("RPC Port: %s\n", cfg.General.RPCPort)
 	fmt.Printf("WebSocket Port: %s\n", cfg.General.WebSocketPort)
+	fmt.Printf("Prover URL: %s\n", cfg.Prover.URL)
+	fmt.Printf("Junction API: %s\n", cfg.Junction.API)
+	fmt.Printf("Junction RPC: %s\n", cfg.Junction.RPC)
 	fmt.Printf("Config File: %s\n", configPath)
 
 	log.Info("\nInitialization completed successfully!")
