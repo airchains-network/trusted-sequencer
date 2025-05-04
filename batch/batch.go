@@ -123,8 +123,10 @@ func ProcessBlocks(client *eth.Client, txnDB, batchDB db.DB, daClient da.DAClien
 				log.Debugf("Batch #%d data: TxCount=%d, PrevHash=%s, BatchHash=%s, PreStateRoot=%s, PostStateRoot=%s, Commitment=%s,n DAProvider=%s , DACommitment=%s, Gas=%d, Time=%d",
 					batch.BatchNo, len(batch.Transactions), batch.PrevMerkleHash, batch.CurrentMerkleHash, batch.PreviousStateRoot, batch.CurrentStateRoot, batch.Commitment, batch.DAProvider, batch.DACommitment, batch.Metadata.TotalGasUsed, batch.Metadata.Timestamp)
 				SaveBatch(batchDB, batch, log)
-				//TODO Send Batch to Rollup Relayer
-	
+				//TODO @Deadlium
+				// 1 Submit Batch Metadata to Juction
+				// 2 Generate Proof from Prover
+				// 3 Submit Proof to Junction for Verification
 				batchNo++
 				txBuffer = txBuffer[128:]
 				traceBuffer = traceBuffer[128:]
@@ -278,7 +280,7 @@ func CreateBatch(client *eth.Client, batchDB db.DB, daClient da.DAClient, batchN
 	txMerkleRoot := computeMerkleRoot(txns)
 
 	// Fetch state roots
-	
+
 	preStateRootBytes, _ := batchDB.Get([]byte(fmt.Sprintf("state_%d", batchNo-1)))
 	preStateRoot := string(preStateRootBytes)
 
@@ -299,7 +301,7 @@ func CreateBatch(client *eth.Client, batchDB db.DB, daClient da.DAClient, batchN
 
 	// Submit batch transaction data to Celestia DA
 	txData := []byte(strings.Join(txns, "")) //
-	
+
 	compressedBatchData, err := compressData(txData)
 	if err != nil {
 		log.Errorf("Failed to compress batch #%d tx data: %v", batchNo, err)
