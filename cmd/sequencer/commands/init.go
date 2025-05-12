@@ -41,8 +41,9 @@ func init() {
 	InitCmd.Flags().String("prover.url", "", "Prover URL")
 
 	// Junction configuration flags
-	InitCmd.Flags().String("junction.api", "", "Junction API URL")
-	InitCmd.Flags().String("junction.rpc", "", "Junction RPC URL")
+	InitCmd.Flags().String("junction.account_name", "", "Junction Account Name")
+	InitCmd.Flags().String("junction.node_api_address", "", "Junction API URL")
+	InitCmd.Flags().String("junction.node_rpc_address", "", "Junction RPC URL")
 
 	// Mark required flags
 	InitCmd.MarkFlagRequired("da.type")
@@ -51,8 +52,9 @@ func init() {
 	InitCmd.MarkFlagRequired("da.namespace")
 	InitCmd.MarkFlagRequired("rollup.id")
 	InitCmd.MarkFlagRequired("prover.url")
-	InitCmd.MarkFlagRequired("junction.api")
-	InitCmd.MarkFlagRequired("junction.rpc")
+	InitCmd.MarkFlagRequired("junction.account_name")
+	InitCmd.MarkFlagRequired("junction.node_api_address")
+	InitCmd.MarkFlagRequired("junction.node_rpc_address")
 }
 
 func initCommand(cmd *cobra.Command) error {
@@ -67,8 +69,9 @@ func initCommand(cmd *cobra.Command) error {
 	rpcPort, _ := cmd.Flags().GetString("rpc.port")
 	wsPort, _ := cmd.Flags().GetString("ws.port")
 	proverURL, _ := cmd.Flags().GetString("prover.url")
-	junctionAPI, _ := cmd.Flags().GetString("junction.api")
-	junctionRPC, _ := cmd.Flags().GetString("junction.rpc")
+	junctionAccountName, _ := cmd.Flags().GetString("junction.account_name")
+	junctionAPI, _ := cmd.Flags().GetString("junction.node_api_address")
+	junctionRPC, _ := cmd.Flags().GetString("junction.node_rpc_address")
 
 	log := logrus.New()
 	log.SetFormatter(&logrus.TextFormatter{
@@ -121,8 +124,9 @@ func initCommand(cmd *cobra.Command) error {
 	cfg.General.RPCPort = rpcPort
 	cfg.General.WebSocketPort = wsPort
 	cfg.Prover.URL = proverURL
-	cfg.Junction.API = junctionAPI
-	cfg.Junction.RPC = junctionRPC
+	cfg.Junction.AccountName = junctionAccountName
+	cfg.Junction.NodeApiAddress = junctionAPI
+	cfg.Junction.NodeRpcAddress = junctionRPC
 
 	// Save config file
 	configPath := filepath.Join(sequencerDir, "config.toml")
@@ -142,8 +146,9 @@ func initCommand(cmd *cobra.Command) error {
 	fmt.Printf("RPC Port: %s\n", cfg.General.RPCPort)
 	fmt.Printf("WebSocket Port: %s\n", cfg.General.WebSocketPort)
 	fmt.Printf("Prover URL: %s\n", cfg.Prover.URL)
-	fmt.Printf("Junction API: %s\n", cfg.Junction.API)
-	fmt.Printf("Junction RPC: %s\n", cfg.Junction.RPC)
+	fmt.Printf("Junction Account Name: %s\n", cfg.Junction.AccountName)
+	fmt.Printf("Junction API: %s\n", cfg.Junction.NodeApiAddress)
+	fmt.Printf("Junction RPC: %s\n", cfg.Junction.NodeRpcAddress)
 	fmt.Printf("Config File: %s\n", configPath)
 
 	log.Info("\nInitialization completed successfully!")

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/airchains-network/trusted-sequencer/batch/da"
+	"github.com/airchains-network/trusted-sequencer/junction"
 	"github.com/airchains-network/trusted-sequencer/state"
 
 	"github.com/airchains-network/trusted-sequencer/db"
@@ -57,7 +58,7 @@ type txData struct {
 }
 
 // ProcessBlocks processes Ethereum blocks and creates batches
-func ProcessBlocks(client *eth.Client, txnDB, batchDB db.DB, daClient da.DAClient, evmState *state.EVMState, vmProcessor *state.Processor, rollupNamespace string, log *logrus.Logger) {
+func ProcessBlocks(client *eth.Client, junctionClient *junction.JunctionClient, txnDB, batchDB db.DB, daClient da.DAClient, evmState *state.EVMState, vmProcessor *state.Processor, rollupNamespace string, log *logrus.Logger) {
 	// Load last processed block
 	lastBlockBytes, err := batchDB.Get([]byte("last_block"))
 	if err != nil {

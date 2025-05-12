@@ -58,8 +58,9 @@ type ProverConfig struct {
 
 // JunctionConfig holds Junction network settings
 type JunctionConfig struct {
-	API string `toml:"api"`
-	RPC string `toml:"rpc"`
+	AccountName    string `toml:account_name`
+	NodeApiAddress string `toml:"node_api_address"`
+	NodeRpcAddress string `toml:"node_rpc_address"`
 }
 
 // expandHomeDir replaces ~ with the user's home directory
@@ -107,8 +108,9 @@ func DefaultConfig() Config {
 			URL: "", // Will be set by user
 		},
 		Junction: JunctionConfig{
-			API: "", // Will be set by user
-			RPC: "", // Will be set by user
+			AccountName:    "", // Will be set by user
+			NodeApiAddress: "", // Will be set by user
+			NodeRpcAddress: "", // Will be set by user
 		},
 	}
 }
