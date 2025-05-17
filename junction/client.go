@@ -109,7 +109,15 @@ func (j *JunctionClient) checkBalance(ctx context.Context) error {
 	return nil
 }
 
-func (j *JunctionClient) SubmitBatchMetadata(ctx context.Context) {
+func (j *JunctionClient) SubmitBatchMetadata(ctx context.Context,
+	batchNo uint64,
+	rollupId string,
+	daName string,
+	daCommitment string,
+	daHash string,
+	daPointer string,
+	daNamespace string,
+) {
 	for {
 		err := j.checkBalance(ctx)
 		if err != nil {
@@ -118,15 +126,22 @@ func (j *JunctionClient) SubmitBatchMetadata(ctx context.Context) {
 			continue
 		}
 
+		accountAddress, err := j.Account.Address("air")
+		if err != nil {
+			logrus.Warnf("error in getting account address : %s", err.Error())
+			time.Sleep(5 * time.Second)
+			continue
+		}
+
 		submitBatchMetadataBody := types.MsgSubmitBatchMetadata{
-			Creator:      "",
-			BatchNo:      1,
-			RollupId:     "",
-			DaName:       "",
-			DaCommitment: "",
-			DaHash:       "",
-			DaPointer:    "",
-			DaNamespace:  "",
+			Creator:      accountAddress,
+			BatchNo:      batchNo,
+			RollupId:     rollupId,
+			DaName:       daName,
+			DaCommitment: daCommitment,
+			DaHash:       daHash,
+			DaPointer:    daPointer,
+			DaNamespace:  daNamespace,
 		}
 		account := *j.Account
 
@@ -148,7 +163,14 @@ func (j *JunctionClient) SubmitBatchMetadata(ctx context.Context) {
 
 }
 
-func (j *JunctionClient) SubmitBatch(ctx context.Context) {
+func (j *JunctionClient) SubmitBatch(ctx context.Context,
+	batchNo uint64,
+	rollupId string,
+	merkleRootHash string,
+	previousMerkleRootHash string,
+	zkProof []byte,
+	pubWitness []byte,
+) {
 	for {
 		err := j.checkBalance(ctx)
 		if err != nil {
@@ -157,11 +179,18 @@ func (j *JunctionClient) SubmitBatch(ctx context.Context) {
 			continue
 		}
 
+		accountAddress, err := j.Account.Address("air")
+		if err != nil {
+			logrus.Warnf("error in getting account address : %s", err.Error())
+			time.Sleep(5 * time.Second)
+			continue
+		}
+
 		submitBatchMetadataBody := types.MsgSubmitBatch{
-			Creator:                "",
-			RollupId:               "",
-			BatchNo:                1,
-			MerkleRootHash:         "",
+			Creator:                accountAddress,
+			RollupId:               rollupId,
+			BatchNo:                batchNo,
+			MerkleRootHash:         merkleRootHash,
 			PreviousMerkleRootHash: "",
 			ZkProof:                []byte{},
 			PublicWitness:          []byte{},
