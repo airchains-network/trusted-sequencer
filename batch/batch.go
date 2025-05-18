@@ -13,11 +13,12 @@ import (
 	"time"
 
 	"github.com/airchains-network/trusted-sequencer/batch/da"
-	"github.com/airchains-network/trusted-sequencer/junction"
-	"github.com/airchains-network/trusted-sequencer/state"
-
 	"github.com/airchains-network/trusted-sequencer/db"
 	"github.com/airchains-network/trusted-sequencer/eth"
+	"github.com/airchains-network/trusted-sequencer/junction"
+	"github.com/airchains-network/trusted-sequencer/prover"
+	"github.com/airchains-network/trusted-sequencer/prover/types"
+	"github.com/airchains-network/trusted-sequencer/state"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/sirupsen/logrus"
@@ -61,8 +62,27 @@ type txData struct {
 	toBalanceCurrentBlock string
 }
 
+// Convert batch to BatchStruct
+func convertToBatchStruct(batch *Batch) types.BatchStruct {
+	return types.BatchStruct{
+		From:              batch.Transactions, // Note: This should be modified to extract actual from addresses
+		To:                batch.Transactions, // Note: This should be modified to extract actual to addresses
+		Amounts:           batch.Transactions, // Note: This should be modified to extract actual amounts
+		TransactionHash:   batch.Transactions, // Note: This should be modified to extract actual tx hashes
+		SenderBalances:    batch.FromBalancesPrevBlock,
+		ReceiverBalances:  batch.ToBalancesCurrentBlock,
+		PreStateRoot:      batch.PreviousStateRoot,
+		PostStateRoot:     batch.CurrentStateRoot,
+		TxMerkleRoot:      batch.CurrentMerkleHash,
+		ExpectedBatchHash: batch.Commitment,
+	}
+}
+
 // ProcessBlocks processes Ethereum blocks and creates batches
 func ProcessBlocks(client *eth.Client, junctionClient *junction.JunctionClient, txnDB, batchDB db.DB, daClient da.DAClient, evmState *state.EVMState, vmProcessor *state.Processor, rollupNamespace string, log *logrus.Logger) {
+	// Initialize prover client
+	proverClient := prover.NewProverClient()
+
 	// Load last processed block
 	lastBlockBytes, err := batchDB.Get([]byte("last_block"))
 	if err != nil {
@@ -134,6 +154,24 @@ func ProcessBlocks(client *eth.Client, junctionClient *junction.JunctionClient, 
 				SaveBatch(batchDB, batch, log)
 				ctx := context.Background()
 				junctionClient.SubmitBatchMetadata(ctx, uint64(batch.BatchNo), rollupNamespace, batch.DAProvider, batch.DACommitment, batch.DABlockHash, batch.DATxHash, rollupNamespace)
+				batch.Submitted = true
+				SaveBatch(batchDB, batch, log)
+				batchStruct := convertToBatchStruct(&batch)
+				proofData, err := proverClient.ProverGenerate(context.Background(), rollupNamespace, batchStruct, rollupNamespace, batch.PreviousStateRoot, batch.CurrentStateRoot, batch.CurrentMerkleHash, batch.DACommitment)
+				if err != nil {
+					log.Errorf("Failed to generate proof for batch #%d: %v", batchNo, err)
+					continue
+				} else {
+					log.Infof("Successfully generated proof for batch #%d", batchNo)
+					// Store proof data in the batch
+					proofBytes, _ := json.Marshal(proofData)
+					if err := batchDB.Put([]byte(fmt.Sprintf("proof_%d", batchNo)), proofBytes); err != nil {
+						log.Errorf("Failed to store proof for batch #%d: %v", batchNo, err)
+					}
+				}
+				junctionClient.SubmitBatch(context.Background(), uint64(batch.BatchNo), rollupNamespace, batch.CurrentMerkleHash, batch.PrevMerkleHash, proofData.ProofData, proofData.PublicInputs)
+				batch.Verified = true
+				SaveBatch(batchDB, batch, log)
 
 				batchNo++
 				txBuffer = txBuffer[128:]

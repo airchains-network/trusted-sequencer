@@ -1,11 +1,24 @@
 package types
 
+type BatchStruct struct {
+	From              []string
+	To                []string
+	Amounts           []string
+	TransactionHash   []string
+	SenderBalances    []string
+	ReceiverBalances  []string
+	PreStateRoot      string
+	PostStateRoot     string
+	TxMerkleRoot      string
+	ExpectedBatchHash string
+}
 type ProofGenerateBodyStruct struct {
 	RollupID      string `json:"rollup-id"`
 	PreStateRoot  string `json:"preStateRoot"`
 	PostStateRoot string `json:"postStateRoot"`
 	BatchHash     string `json:"batchHash"`
 	DaCommitment  string `json:"daCommitment"`
+	BatchData     BatchStruct
 }
 
 type ProofData struct {
@@ -24,4 +37,3 @@ type ProofResponceStruct struct {
 	Description string    `json:"description"`
 	Data        ProofData `json:"data,omitempty"`
 }
-
