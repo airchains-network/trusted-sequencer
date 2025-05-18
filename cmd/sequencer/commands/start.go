@@ -15,6 +15,7 @@ import (
 	"github.com/airchains-network/trusted-sequencer/eth"
 	"github.com/airchains-network/trusted-sequencer/junction"
 	"github.com/airchains-network/trusted-sequencer/pool"
+	"github.com/airchains-network/trusted-sequencer/prover"
 	"github.com/airchains-network/trusted-sequencer/proxy"
 	"github.com/airchains-network/trusted-sequencer/state"
 	"github.com/sirupsen/logrus"
@@ -106,6 +107,13 @@ func startCommand() error {
 		time.Sleep(5 * time.Second)
 	}
 
+	// Initialize prover client
+	if cfg.Prover.URL == "" {
+		log.Fatalf("Prover URL not configured")
+	}
+	proverClient := prover.NewProverClient(cfg.Prover.URL)
+	log.Infof("Initialized prover client with URL: %s", cfg.Prover.URL)
+
 	// Start transaction pool
 	txPool := pool.NewTxPool()
 	go txPool.Process(ethClient, txnDB, log)
@@ -152,7 +160,7 @@ func startCommand() error {
 	log.Infof("Starting from block %d", lastBlock)
 
 	// Start block processing
-	go batch.ProcessBlocks(ethClient, junctionClient, txnDB, batchDB, daClient, evmState, vmProcessor, cfg.Rollup.RollupID, log)
+	go batch.ProcessBlocks(ethClient, junctionClient, proverClient, txnDB, batchDB, daClient, evmState, vmProcessor, cfg.Rollup.RollupID, log)
 
 	// Start proxy server
 	log.Infof("Starting Trusted Sequencer on %s...", cfg.General.RPCPort)

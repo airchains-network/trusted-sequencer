@@ -79,10 +79,7 @@ func convertToBatchStruct(batch *Batch) types.BatchStruct {
 }
 
 // ProcessBlocks processes Ethereum blocks and creates batches
-func ProcessBlocks(client *eth.Client, junctionClient *junction.JunctionClient, txnDB, batchDB db.DB, daClient da.DAClient, evmState *state.EVMState, vmProcessor *state.Processor, rollupNamespace string, log *logrus.Logger) {
-	// Initialize prover client
-	proverClient := prover.NewProverClient()
-
+func ProcessBlocks(client *eth.Client, junctionClient *junction.JunctionClient, proverClient *prover.ProverClient, txnDB, batchDB db.DB, daClient da.DAClient, evmState *state.EVMState, vmProcessor *state.Processor, rollupNamespace string, log *logrus.Logger) {
 	// Load last processed block
 	lastBlockBytes, err := batchDB.Get([]byte("last_block"))
 	if err != nil {
@@ -157,7 +154,7 @@ func ProcessBlocks(client *eth.Client, junctionClient *junction.JunctionClient, 
 				batch.Submitted = true
 				SaveBatch(batchDB, batch, log)
 				batchStruct := convertToBatchStruct(&batch)
-				proofData, err := proverClient.ProverGenerate(context.Background(), rollupNamespace, batchStruct, rollupNamespace, batch.PreviousStateRoot, batch.CurrentStateRoot, batch.CurrentMerkleHash, batch.DACommitment)
+				proofData, err := proverClient.ProverGenerate(context.Background(), batchStruct, rollupNamespace, batch.PreviousStateRoot, batch.CurrentStateRoot, batch.CurrentMerkleHash, batch.DACommitment)
 				if err != nil {
 					log.Errorf("Failed to generate proof for batch #%d: %v", batchNo, err)
 					continue

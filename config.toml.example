@@ -4,9 +4,11 @@
 [general]
 # Ethereum RPC endpoint for connecting to the Ethereum network
 geth_rpc_url = "http://127.0.0.1:8545"
+geth_ws_url = "ws://127.0.0.1:8546"
 
-# Port for the proxy server to listen on
-proxy_port = ":8080"
+# Ports for the servers to listen on
+rpc_port = ":11111"
+ws_port = ":11112"
 
 [database]
 # Path to store transaction database
@@ -32,9 +34,19 @@ auth_token = "your_auth_token_here"
 namespace = "airchains"
 
 [rollup]
-# Rollup Id
-namespace = "airchains-rollup-69420"
+# Rollup ID
+rollup_id = "airchains-rollup-69420"
 
 [genesis]
 # Path to genesis file
-file_path = "./genesis.json"
+file_path = "~/.trusted-sequencer/genesis.json"
+
+[prover]
+# URL for the prover service
+url = "http://localhost:8081"
+
+[junction]
+# Junction network configuration
+account_name = "your_account_name"
+node_api_address = "http://localhost:1317"
+node_rpc_address = "http://localhost:26657"

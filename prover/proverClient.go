@@ -17,15 +17,17 @@ import (
 type ProverClient struct {
 	client *http.Client
 	log    *logrus.Logger
+	url    string
 }
 
 // NewProverClient creates a new ProverClient with a 5-minute timeout.
-func NewProverClient() *ProverClient {
+func NewProverClient(url string) *ProverClient {
 	return &ProverClient{
 		client: &http.Client{
 			Timeout: 300 * time.Second, // Set timeout to 5 minutes
 		},
 		log: logrus.New(),
+		url: url,
 	}
 }
 
@@ -59,7 +61,7 @@ func (p *ProverClient) proverRequest(uri string, body any) ([]byte, int, error) 
 	return bodyBytes, resp.StatusCode, nil
 }
 
-func (p *ProverClient) ProverGenerate(ctx context.Context, endpoint string, batchData types.BatchStruct, rollupID string, preStateRoot string, postStateRoot string, batchHash string, daCommitment string) (*types.ProofData, error) {
+func (p *ProverClient) ProverGenerate(ctx context.Context, batchData types.BatchStruct, rollupID string, preStateRoot string, postStateRoot string, batchHash string, daCommitment string) (*types.ProofData, error) {
 	proofGenerateStruct := types.ProofGenerateBodyStruct{
 		RollupID:      rollupID,
 		PreStateRoot:  preStateRoot,
@@ -69,7 +71,7 @@ func (p *ProverClient) ProverGenerate(ctx context.Context, endpoint string, batc
 		BatchData:     batchData,
 	}
 
-	uri := fmt.Sprintf("%s/api/v1/proof/generate", endpoint)
+	uri := fmt.Sprintf("%s/api/v1/proof/generate", p.url)
 
 	for attempt := 1; ; attempt++ {
 		// Check for context cancellation
