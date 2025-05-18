@@ -13,10 +13,12 @@ import (
 	"time"
 
 	"github.com/airchains-network/trusted-sequencer/batch/da"
-	"github.com/airchains-network/trusted-sequencer/state"
-
 	"github.com/airchains-network/trusted-sequencer/db"
 	"github.com/airchains-network/trusted-sequencer/eth"
+	"github.com/airchains-network/trusted-sequencer/junction"
+	"github.com/airchains-network/trusted-sequencer/prover"
+	"github.com/airchains-network/trusted-sequencer/prover/types"
+	"github.com/airchains-network/trusted-sequencer/state"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/sirupsen/logrus"
@@ -24,21 +26,23 @@ import (
 
 // Batch represents a group of 128 transactions with DA commitment
 type Batch struct {
-	Transactions      []string      `json:"transactions"`
-	ExecutionTraces   []string      `json:"execution_traces"`
-	PrevMerkleHash    string        `json:"prev_merkle_hash"`
-	CurrentMerkleHash string        `json:"current_merkle_hash"`
-	PreviousStateRoot string        `json:"previous_state_root"`
-	CurrentStateRoot  string        `json:"current_state_root"`
-	BatchNo           int           `json:"batch_no"`
-	Metadata          BatchMetadata `json:"metadata"`
-	Commitment        string        `json:"commitment"`
-	DACommitment      string        `json:"da_commitment"`
-	DABlockHash       string        `json:"da_block_hash"`
-	DATxHash          string        `json:"da_tx_hash"`
-	DAProvider        string        `json:"da_provider"`
-	Submitted         bool          `json:"submitted"`
-	Verified          bool          `json:"verified"`
+	Transactions           []string      `json:"transactions"`
+	ExecutionTraces        []string      `json:"execution_traces"`
+	FromBalancesPrevBlock  []string      `json:"from_balances_prev_block"`
+	ToBalancesCurrentBlock []string      `json:"to_balances_current_block"`
+	PrevMerkleHash         string        `json:"prev_merkle_hash"`
+	CurrentMerkleHash      string        `json:"current_merkle_hash"`
+	PreviousStateRoot      string        `json:"previous_state_root"`
+	CurrentStateRoot       string        `json:"current_state_root"`
+	BatchNo                int           `json:"batch_no"`
+	Metadata               BatchMetadata `json:"metadata"`
+	Commitment             string        `json:"commitment"`
+	DACommitment           string        `json:"da_commitment"`
+	DABlockHash            string        `json:"da_block_hash"`
+	DATxHash               string        `json:"da_tx_hash"`
+	DAProvider             string        `json:"da_provider"`
+	Submitted              bool          `json:"submitted"`
+	Verified               bool          `json:"verified"`
 }
 
 // BatchMetadata holds metadata for a batch
@@ -50,14 +54,32 @@ type BatchMetadata struct {
 
 // txData holds transaction data for batching
 type txData struct {
-	txHex string
-	trace string
-	gas   uint64
-	time  int64
+	txHex                 string
+	trace                 string
+	gas                   uint64
+	time                  int64
+	fromBalancePrevBlock  string
+	toBalanceCurrentBlock string
+}
+
+// Convert batch to BatchStruct
+func convertToBatchStruct(batch *Batch) types.BatchStruct {
+	return types.BatchStruct{
+		From:              batch.Transactions, // Note: This should be modified to extract actual from addresses
+		To:                batch.Transactions, // Note: This should be modified to extract actual to addresses
+		Amounts:           batch.Transactions, // Note: This should be modified to extract actual amounts
+		TransactionHash:   batch.Transactions, // Note: This should be modified to extract actual tx hashes
+		SenderBalances:    batch.FromBalancesPrevBlock,
+		ReceiverBalances:  batch.ToBalancesCurrentBlock,
+		PreStateRoot:      batch.PreviousStateRoot,
+		PostStateRoot:     batch.CurrentStateRoot,
+		TxMerkleRoot:      batch.CurrentMerkleHash,
+		ExpectedBatchHash: batch.Commitment,
+	}
 }
 
 // ProcessBlocks processes Ethereum blocks and creates batches
-func ProcessBlocks(client *eth.Client, txnDB, batchDB db.DB, daClient da.DAClient, evmState *state.EVMState, vmProcessor *state.Processor, rollupNamespace string, log *logrus.Logger) {
+func ProcessBlocks(client *eth.Client, junctionClient *junction.JunctionClient, proverClient *prover.ProverClient, txnDB, batchDB db.DB, daClient da.DAClient, evmState *state.EVMState, vmProcessor *state.Processor, rollupNamespace string, log *logrus.Logger) {
 	// Load last processed block
 	lastBlockBytes, err := batchDB.Get([]byte("last_block"))
 	if err != nil {
@@ -91,6 +113,8 @@ func ProcessBlocks(client *eth.Client, txnDB, batchDB db.DB, daClient da.DAClien
 
 	txBuffer := partialBatch.Transactions
 	traceBuffer := partialBatch.ExecutionTraces
+	fromBalanceBuffer := partialBatch.FromBalancesPrevBlock
+	toBalanceBuffer := partialBatch.ToBalancesCurrentBlock
 	totalGas := partialBatch.Metadata.TotalGasUsed
 	timestamp := partialBatch.Metadata.Timestamp
 
@@ -106,6 +130,8 @@ func ProcessBlocks(client *eth.Client, txnDB, batchDB db.DB, daClient da.DAClien
 				case tx := <-txChan:
 					txBuffer = append(txBuffer, tx.txHex)
 					traceBuffer = append(traceBuffer, tx.trace)
+					fromBalanceBuffer = append(fromBalanceBuffer, tx.fromBalancePrevBlock)
+					toBalanceBuffer = append(toBalanceBuffer, tx.toBalanceCurrentBlock)
 					totalGas += tx.gas
 					timestamp = tx.time
 					log.Infof("Added tx to batch #%d: %d/128 txns", batchNo, len(txBuffer))
@@ -119,24 +145,48 @@ func ProcessBlocks(client *eth.Client, txnDB, batchDB db.DB, daClient da.DAClien
 			// Create batch when full
 			if len(txBuffer) >= 128 {
 				log.Infof("Creating batch #%d with 128 txns", batchNo)
-				batch := CreateBatch(client, batchDB, daClient, batchNo, txBuffer[:128], traceBuffer[:128], totalGas, timestamp, evmState, rollupNamespace, log)
-				log.Debugf("Batch #%d data: TxCount=%d, PrevHash=%s, BatchHash=%s, PreStateRoot=%s, PostStateRoot=%s, Commitment=%s,n DAProvider=%s , DACommitment=%s, Gas=%d, Time=%d",
+				batch := CreateBatch(client, batchDB, daClient, batchNo, txBuffer[:128], traceBuffer[:128], fromBalanceBuffer[:128], toBalanceBuffer[:128], totalGas, timestamp, evmState, rollupNamespace, log)
+				log.Debugf("Batch #%d data: TxCount=%d, PrevHash=%s, BatchHash=%s, PreStateRoot=%s, PostStateRoot=%s, Commitment=%s, DAProvider=%s, DACommitment=%s, Gas=%d, Time=%d",
 					batch.BatchNo, len(batch.Transactions), batch.PrevMerkleHash, batch.CurrentMerkleHash, batch.PreviousStateRoot, batch.CurrentStateRoot, batch.Commitment, batch.DAProvider, batch.DACommitment, batch.Metadata.TotalGasUsed, batch.Metadata.Timestamp)
 				SaveBatch(batchDB, batch, log)
-				//TODO Send Batch to Rollup Relayer
+				ctx := context.Background()
+				junctionClient.SubmitBatchMetadata(ctx, uint64(batch.BatchNo), rollupNamespace, batch.DAProvider, batch.DACommitment, batch.DABlockHash, batch.DATxHash, rollupNamespace)
+				batch.Submitted = true
+				SaveBatch(batchDB, batch, log)
+				batchStruct := convertToBatchStruct(&batch)
+				proofData, err := proverClient.ProverGenerate(context.Background(), batchStruct, rollupNamespace, batch.PreviousStateRoot, batch.CurrentStateRoot, batch.CurrentMerkleHash, batch.DACommitment)
+				if err != nil {
+					log.Errorf("Failed to generate proof for batch #%d: %v", batchNo, err)
+					continue
+				} else {
+					log.Infof("Successfully generated proof for batch #%d", batchNo)
+					// Store proof data in the batch
+					proofBytes, _ := json.Marshal(proofData)
+					if err := batchDB.Put([]byte(fmt.Sprintf("proof_%d", batchNo)), proofBytes); err != nil {
+						log.Errorf("Failed to store proof for batch #%d: %v", batchNo, err)
+					}
+				}
+				junctionClient.SubmitBatch(context.Background(), uint64(batch.BatchNo), rollupNamespace, batch.CurrentMerkleHash, batch.PrevMerkleHash, proofData.ProofData, proofData.PublicInputs)
+				batch.Verified = true
+				SaveBatch(batchDB, batch, log)
+
 				batchNo++
 				txBuffer = txBuffer[128:]
 				traceBuffer = traceBuffer[128:]
+				fromBalanceBuffer = fromBalanceBuffer[128:]
+				toBalanceBuffer = toBalanceBuffer[128:]
 				totalGas = 0
 			}
 
 			// Save partial batch progress
 			if len(txBuffer) > 0 {
 				partial := Batch{
-					Transactions:    txBuffer,
-					ExecutionTraces: traceBuffer,
-					BatchNo:         batchNo,
-					Metadata:        BatchMetadata{TotalGasUsed: totalGas, Timestamp: timestamp, RollupNamespace: rollupNamespace},
+					Transactions:           txBuffer,
+					ExecutionTraces:        traceBuffer,
+					FromBalancesPrevBlock:  fromBalanceBuffer,
+					ToBalancesCurrentBlock: toBalanceBuffer,
+					BatchNo:                batchNo,
+					Metadata:               BatchMetadata{TotalGasUsed: totalGas, Timestamp: timestamp, RollupNamespace: rollupNamespace},
 				}
 				partialBytes, _ := json.Marshal(partial)
 				batchDB.Put([]byte("partial_batch"), partialBytes)
@@ -190,12 +240,51 @@ func ProcessBlocks(client *eth.Client, txnDB, batchDB db.DB, daClient da.DAClien
 				trace = []byte("{}")
 			}
 
+			// Fetch sender's balance from previous block
+			var fromBalancePrevBlock string
+			fromAddr, err := client.Eth.TransactionSender(context.Background(), tx, block.Hash(), 0)
+			if err != nil {
+				log.Warnf("Failed to get sender for tx %s: %v", tx.Hash().Hex(), err)
+				fromBalancePrevBlock = "0x0"
+			} else {
+				prevBlockNum := big.NewInt(lastBlock - 1)
+				if prevBlockNum.Sign() <= 0 {
+					fromBalancePrevBlock = "0x0"
+				} else {
+					balance, err := client.Eth.BalanceAt(context.Background(), fromAddr, prevBlockNum)
+					if err != nil {
+						log.Warnf("Failed to fetch balance for %s at block %d: %v", fromAddr.Hex(), prevBlockNum, err)
+						fromBalancePrevBlock = "0x0"
+					} else {
+						fromBalancePrevBlock = "0x" + balance.Text(16)
+					}
+				}
+			}
+
+			// Fetch recipient's balance from current block
+			var toBalanceCurrentBlock string
+			toAddr := tx.To()
+			if toAddr == nil {
+				// Contract creation transaction, no recipient
+				toBalanceCurrentBlock = "0x0"
+			} else {
+				balance, err := client.Eth.BalanceAt(context.Background(), *toAddr, big.NewInt(lastBlock))
+				if err != nil {
+					log.Warnf("Failed to fetch balance for %s at block %d: %v", toAddr.Hex(), lastBlock, err)
+					toBalanceCurrentBlock = "0x0"
+				} else {
+					toBalanceCurrentBlock = "0x" + balance.Text(16)
+				}
+			}
+
 			// Send tx data to batching goroutine
 			txChan <- txData{
-				txHex: txStr,
-				trace: string(trace),
-				gas:   tx.Gas(),
-				time:  int64(block.Time()),
+				txHex:                 txStr,
+				trace:                 string(trace),
+				gas:                   tx.Gas(),
+				time:                  int64(block.Time()),
+				fromBalancePrevBlock:  fromBalancePrevBlock,
+				toBalanceCurrentBlock: toBalanceCurrentBlock,
 			}
 		}
 
@@ -266,7 +355,7 @@ func ComputeBatchCommitment(batchHash string, metadata BatchMetadata, log *logru
 }
 
 // CreateBatch constructs a new batch with state computation, DA commitment, and batch commitment
-func CreateBatch(client *eth.Client, batchDB db.DB, daClient da.DAClient, batchNo int, txns, traces []string, gas uint64, timestamp int64, evmState *state.EVMState, rollupNamespace string, log *logrus.Logger) Batch {
+func CreateBatch(client *eth.Client, batchDB db.DB, daClient da.DAClient, batchNo int, txns, traces, fromBalances, toBalances []string, gas uint64, timestamp int64, evmState *state.EVMState, rollupNamespace string, log *logrus.Logger) Batch {
 	prevHashBytes, _ := batchDB.Get([]byte(fmt.Sprintf("batch_%d_hash", batchNo-1)))
 	prevHash := string(prevHashBytes)
 	if batchNo == 1 {
@@ -277,7 +366,6 @@ func CreateBatch(client *eth.Client, batchDB db.DB, daClient da.DAClient, batchN
 	txMerkleRoot := computeMerkleRoot(txns)
 
 	// Fetch state roots
-	
 	preStateRootBytes, _ := batchDB.Get([]byte(fmt.Sprintf("state_%d", batchNo-1)))
 	preStateRoot := string(preStateRootBytes)
 
@@ -297,17 +385,12 @@ func CreateBatch(client *eth.Client, batchDB db.DB, daClient da.DAClient, batchN
 	commitment := ComputeBatchCommitment(batchHash, metadata, log)
 
 	// Submit batch transaction data to Celestia DA
-	txData := []byte(strings.Join(txns, "")) //
-	
+	txData := []byte(strings.Join(txns, ""))
+
 	compressedBatchData, err := compressData(txData)
 	if err != nil {
 		log.Errorf("Failed to compress batch #%d tx data: %v", batchNo, err)
 		compressedBatchData = []byte{}
-	}
-	daBlockHash, daTxHash, daCommitment, err := daClient.SubmitToDA(compressedBatchData, log)
-	if err != nil {
-		log.Errorf("Failed to submit batch #%d tx data to Celestia DA: %v", batchNo, err)
-		daCommitment = "0x0"
 	}
 	var daType string
 	switch daClient.(type) {
@@ -319,20 +402,28 @@ func CreateBatch(client *eth.Client, batchDB db.DB, daClient da.DAClient, batchN
 		daType = "Unknown"
 	}
 
+	daBlockHash, daTxHash, daCommitment, err := daClient.SubmitToDA(compressedBatchData, log)
+	if err != nil {
+		log.Errorf("Failed to submit batch #%d tx data to Celestia DA: %v", batchNo, err)
+		daCommitment = "0x0"
+	}
+
 	return Batch{
-		Transactions:      txns,
-		ExecutionTraces:   traces,
-		PrevMerkleHash:    prevHash,
-		CurrentMerkleHash: batchHash,
-		PreviousStateRoot: preStateRoot,
-		CurrentStateRoot:  postStateRoot,
-		BatchNo:           batchNo,
-		Metadata:          metadata,
-		Commitment:        commitment,
-		DAProvider:        daType,
-		DACommitment:      daCommitment,
-		DABlockHash:       daBlockHash,
-		DATxHash:          daTxHash,
+		Transactions:           txns,
+		ExecutionTraces:        traces,
+		FromBalancesPrevBlock:  fromBalances,
+		ToBalancesCurrentBlock: toBalances,
+		PrevMerkleHash:         prevHash,
+		CurrentMerkleHash:      batchHash,
+		PreviousStateRoot:      preStateRoot,
+		CurrentStateRoot:       postStateRoot,
+		BatchNo:                batchNo,
+		Metadata:               metadata,
+		Commitment:             commitment,
+		DAProvider:             daType,
+		DACommitment:           daCommitment,
+		DABlockHash:            daBlockHash,
+		DATxHash:               daTxHash,
 	}
 }
 
