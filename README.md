@@ -1,59 +1,121 @@
 # Trusted Sequencer
 
-A trusted sequencer implementation for rollups.
+[![Go Version](https://img.shields.io/badge/Go-1.24+-00ADD8?style=flat-square&logo=go)](https://golang.org)
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Version](https://img.shields.io/badge/version-v0.1.0--beta-orange)](https://github.com/airchains-network/trusted-sequencer/releases)
 
-## Features
+The Trusted Sequencer is a critical infrastructure component for Airchains rollup solutions, designed to bridge the gap between scalability and security in blockchain networks. At its core, it acts as a sophisticated transaction orchestrator that:
 
-- Transaction ordering and sequencing
-- Data availability layer integration (Celestia/Avail)
-- State management and EVM compatibility
-- High-performance transaction processing
-- Configurable through command-line flags
-- JSON-RPC and WebSocket interfaces with EVM chain subscription support
+🔗 **Orders & Batches Transactions**
+- Groups transactions into optimized batches of 128
+- Ensures deterministic execution order
+- Maintains transaction finality and consistency
+
+🏛️ **Manages State Transitions**
+- Tracks and verifies EVM-compatible state changes
+- Handles smart contract deployments and interactions
+- Maintains account balances and nonces with cryptographic integrity
+
+📡 **Ensures Data Availability**
+- Integrates with specialized DA layers (Celestia/Avail)
+- Guarantees permanent access to transaction data
+- Implements robust retry mechanisms for reliable data submission
+
+🔒 **Generates & Verifies Proofs**
+- Coordinates with ZKFHE prover service for state validation
+- Ensures cryptographic verification of state transitions
+- Maintains proof integrity across the network
+
+🌐 **Synchronizes Network State**
+- Interfaces with Junction Network for cross-chain communication
+- Coordinates with Operator nodes (ZBC Ethermint)
+- Maintains network-wide consensus and state synchronization
+
+Built in Go with a focus on performance and reliability, this implementation provides the foundational infrastructure needed for secure, scalable, and efficient Layer 2 solutions.
+
+## Features 
+  
+  - Deterministic ordering with state validation
+  - Does transaction batching (128 tx per batch)
+  - Support for EIP-1559 transactions
+
+- 🌐 **Data Availability Integration**
+  - Support for multiple DA layers:
+    - Celestia
+    - Avail
+  - Automatic retry mechanisms
+  - Configurable namespace and parameters
+
+- ⚡ **High Performance**
+  - Parallel transaction processing
+  - Optimized state management
+  - LevelDB-based storage
+  - WebSocket subscriptions
+
+- 🔧 **Flexible Configuration**
+  - TOML-based configuration
+  - Command-line interface
+  - Environment-specific settings
 
 ## Prerequisites
 
-- Go 1.21 or later
-- Access to a DA layer node (Avail or Celestia)
-- A Geth node running locally or remotely
+- Go 1.24 or later
+- Access to a DA layer node (Celestia or Avail)
+- Access to an Operator node (ZBC Ethermint Node By Zama)
+- ZKFHE Prover Service endpoint
+- Junction Network access
 
-## Installation
+## Quick Start
+
+### Installation
 
 ```bash
+# Clone the repository
 git clone https://github.com/airchains-network/trusted-sequencer.git
 cd trusted-sequencer
-go build -o build/trusted-sequencer cmd/sequencer/main.go
+
+# Install dependencies
+make install-deps
+
+# Build the binary
+make build
 ```
 
-## Usage
+### Configuration
+
+1. Create your configuration file:
+```bash
+cp config.toml.example ~/.trusted-sequencer/config.toml
+```
+
+2. Edit the configuration:
+```toml
+[general]
+geth_rpc_url = "http://your-geth-node:8545"
+geth_ws_url = "ws://your-geth-node:8546"
+rpc_port = ":11111"
+ws_port = ":11112"
+
+[da]
+type = "celestia"  # or "avail"
+node_addr = "http://your-da-node:26657"
+auth_token = "your_auth_token"
+namespace = "your_namespace"
+
+[prover]
+url = "http://your-prover-service:8081"
+
+[junction]
+account_name = "your_account"
+node_api_address = "http://junction-node:1317"
+node_rpc_address = "http://junction-node:26657"
+```
 
 ### Initialize the Sequencer
 
 ```bash
-./build/trusted-sequencer init \
-  --da.type <avail|celestia> \
-  --da.node-addr <node-address> \
-  --da.auth-token <auth-token> \
-  --da.namespace <namespace> \
-  --rollup.id <rollup-id> \
-  --geth.rpc-url <geth-rpc-url> \
-  --geth.ws-url <geth-ws-url> \
-  --rpc.port <rpc-port> \
-  --ws.port <ws-port>
+./build/trusted-sequencer init
 ```
-
-All DA layer configuration values are required:
-- `--da.type`: DA layer type (avail/celestia)
-- `--da.node-addr`: DA node address
-- `--da.auth-token`: DA auth token
-- `--da.namespace`: DA namespace
-- `--rollup.id`: Rollup ID
-
-Optional configuration:
-- `--geth.rpc-url`: Geth RPC URL (default: http://localhost:8545)
-- `--geth.ws-url`: Geth WebSocket URL (default: ws://localhost:8546)
-- `--rpc.port`: RPC server port (default: :11111)
-- `--ws.port`: WebSocket server port (default: :11112)
 
 ### Start the Sequencer
 
@@ -61,168 +123,108 @@ Optional configuration:
 ./build/trusted-sequencer start
 ```
 
-## API Interfaces
-
-The trusted sequencer provides two interfaces for interacting with the system:
-
+## API Endpoints
+docs
 ### JSON-RPC API
 
-The JSON-RPC API is available at the root endpoint:
+Available at `http://localhost:11111`
 
 ```bash
+# Example: Send raw transaction
 curl -X POST http://localhost:11111 \
   -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","method":"eth_sendRawTransaction","params":["0x..."],"id":1}'
+  -d '{
+    "jsonrpc":"2.0",
+    "method":"eth_sendRawTransaction",
+    "params":["0x..."],
+    "id":1
+  }'
 ```
 
 ### WebSocket API
 
-The WebSocket API is available at the root endpoint and supports EVM chain subscriptions:
+Available at `ws://localhost:11112`
 
 ```javascript
-// JavaScript example
+// Example: Subscribe to new blocks
 const ws = new WebSocket('ws://localhost:11112');
-
-ws.onopen = function() {
-  console.log('Connected to WebSocket');
-  
-  // Send a transaction
-  ws.send(JSON.stringify({
-    jsonrpc: '2.0',
-    method: 'eth_sendRawTransaction',
-    params: ['0x...'],
-    id: 1
-  }));
-  
-  // Subscribe to new blocks
-  ws.send(JSON.stringify({
-    jsonrpc: '2.0',
-    method: 'eth_subscribe',
-    params: ['newHeads'],
-    id: 2
-  }));
-  
-  // Subscribe to logs with filter
-  ws.send(JSON.stringify({
-    jsonrpc: '2.0',
-    method: 'eth_subscribe',
-    params: ['logs', {
-      address: '0x1234...',
-      topics: ['0xabcd...']
-    }],
-    id: 3
-  }));
-};
-
-ws.onmessage = function(event) {
-  const data = JSON.parse(event.data);
-  console.log('Received:', data);
-  
-  // Handle subscription notifications
-  if (data.method === 'eth_subscription') {
-    const subscriptionId = data.params.subscription;
-    const result = data.params.result;
-    
-    if (result.hash) {
-      console.log('New block:', result.hash, result.number);
-    } else if (result.address) {
-      console.log('New log:', result);
-    }
-  }
-};
-```
-
-#### Supported WebSocket Subscriptions
-
-1. **New Block Headers** (`newHeads`):
-   - Subscribe to new block headers as they are mined
-   - Returns block hash and number
-
-2. **Logs** (`logs`):
-   - Subscribe to logs matching specific criteria
-   - Supports filtering by:
-     - `address`: Contract address (single or array)
-     - `topics`: Event topics (array of topics)
-     - `fromBlock`: Starting block (number or "latest"/"earliest"/"pending")
-     - `toBlock`: Ending block (number or "latest"/"earliest"/"pending")
-
-3. **Unsubscribe**:
-   - Cancel a subscription using the subscription ID:
-   ```javascript
-   ws.send(JSON.stringify({
-     jsonrpc: '2.0',
-     method: 'eth_unsubscribe',
-     params: ['subscription_id'],
-     id: 4
-   }));
-   ```
-
-## Configuration
-
-The sequencer creates a configuration file at `~/.trusted-sequencer/config.toml` with the following structure:
-
-```toml
-[da]
-type = "<avail|celestia>"  # Required
-node_addr = "<node-address>"  # Required
-auth_token = "<auth-token>"  # Required
-namespace = "<namespace>"  # Required
-
-[rollup]
-rollup_id = "<rollup-id>"  # Required
-
-[general]
-geth_rpc_url = "http://localhost:8545"
-geth_ws_url = "ws://localhost:8546"
-rpc_port = ":11111"
-ws_port = ":11112"
-
-[genesis]
-file_path = "~/.trusted-sequencer/genesis.json"
+ws.send(JSON.stringify({
+  jsonrpc: '2.0',
+  method: 'eth_subscribe',
+  params: ['newHeads'],
+  id: 1
+}));
 ```
 
 ## Architecture
 
-The sequencer consists of several key components:
-
-- **Transaction Pool**: Manages incoming transactions
-- **Batch Processor**: Groups transactions into batches
-- **State Manager**: Maintains the rollup state
-- **DA Client**: Handles data availability submissions
-- **Proxy Server**: Provides JSON-RPC and WebSocket interfaces with EVM chain subscription support
+```
+├── batch/          # Batch processing logic
+├── cmd/            # Command-line interface
+├── config/         # Configuration management
+├── da/             # Data availability layer
+├── db/             # Database operations
+├── eth/            # Ethereum client
+├── junction/       # Junction network integration
+├── pool/           # Transaction pool
+├── prover/         # Proof generation
+├── proxy/          # API server
+├── state/          # State management
+└── types/          # Common types
+```
 
 ## Development
 
-### Project Structure
-
-```
-.
-├── cmd/
-│   └── sequencer/          # Main application entry point
-├── config/                 # Configuration management
-├── da/                    # Data availability layer integration
-│   ├── avail/            # Avail-specific implementation
-│   └── celestia/         # Celestia-specific implementation
-├── proxy/                 # Proxy server implementation
-├── sequencer/             # Core sequencer logic
-│   ├── batch/            # Batch management
-│   ├── state/            # State management
-│   └── txn/              # Transaction management
-└── types/                 # Common types and interfaces
-```
-
-### Building
+### Build
 
 ```bash
-go build -o build/trusted-sequencer cmd/sequencer/main.go
+# Build for current platform
+make build
+
+# Build for all platforms
+make build-all
+
+
 ```
 
-### Testing
+### Test
 
 ```bash
-go test ./...
+# Run tests
+make test
+
+# Run linter
+make lint
 ```
+
+## Security Considerations
+
+- This is a beta release and should be used with caution
+- Secure all API endpoints in production
+- Use proper authentication for DA layer access
+- Regularly backup state data
+- Monitor system resources and performance
+
+
+
+## Contributing
+
+1. Fork the repository
+2. Create your feature branch
+3. Commit your changes
+4. Push to the branch
+5. Create a Pull Request
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Support
+
+For support and discussions:
+- [GitHub Issues](https://github.com/airchains-network/trusted-sequencer/issues)
+- [Documentation](https://docs.airchains.io)
+
+---
+<p align="center">Made with ❤️ by Team Airchains</p>
+

@@ -12,8 +12,8 @@ import (
 
 var CreateAccountCmd = &cobra.Command{
 	Use:   "create-account [name]",
-	Short: "Create a new Cosmos wallet",
-	Long:  `Create a new Cosmos wallet with the specified name`,
+	Short: "Create a new Jucntion wallet",
+	Long:  `Create a new Jucntion wallet with the specified name`,
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		name := args[0]

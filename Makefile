@@ -9,10 +9,10 @@ BINARY_UNIX=$(BINARY_NAME)
 
 # Build parameters
 BUILD_DIR=build
-VERSION?=0.1.0
-BUILD_TIME=$(shell date +%FT%T%z)
-GIT_COMMIT=$(shell git rev-parse HEAD)
-LDFLAGS=-ldflags "-X main.Version=$(VERSION) -X main.BuildTime=$(BUILD_TIME) -X main.GitCommit=$(GIT_COMMIT)"
+VERSION := v0.1.0-beta
+COMMIT := $(shell git rev-parse --short HEAD)
+BUILD_TIME := $(shell date -u '+%Y-%m-%d_%H:%M:%S')
+LDFLAGS := -ldflags "-X main.Version=$(VERSION) -X main.Commit=$(COMMIT) -X main.BuildTime=$(BUILD_TIME)"
 
 # Colors for output
 RED=\033[0;31m
@@ -20,7 +20,7 @@ GREEN=\033[0;32m
 BLUE=\033[0;34m
 NC=\033[0m
 
-.PHONY: all build clean test lint run help release docs coverage benchmark proto generate
+.PHONY: all build clean test lint release
 
 all: clean build
 
