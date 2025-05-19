@@ -7,7 +7,7 @@
 The Trusted Sequencer is a critical infrastructure component for Airchains rollup solutions, designed to bridge the gap between scalability and security in blockchain networks. At its core, it acts as a sophisticated transaction orchestrator that:
 
 🔗 **Orders & Batches Transactions**
-- Groups transactions into optimized batches of 128
+- Groups transactions into optimized batches of 128 Txn
 - Ensures deterministic execution order
 - Maintains transaction finality and consistency
 
