@@ -77,7 +77,7 @@ func startCommand() error {
 	}
 
 	// Initialize junction client
-	accountPath := filepath.Join(home, ".junctiond", "keyring-test")
+	accountPath := filepath.Join(home, ".junctiond")
 	junctionClient, err := junction.NewJunctionClient(ctx, cfg.Junction.AccountName, accountPath, cfg.Junction.NodeRpcAddress)
 	if err != nil {
 		log.Fatalf("Failed to initialize junction client: %v", err)
