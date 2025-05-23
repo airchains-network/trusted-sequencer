@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"math/big"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/airchains-network/trusted-sequencer/batch/da"
@@ -144,39 +143,17 @@ func ProcessBlocks(client *eth.Client, junctionClient *junction.JunctionClient, 
 	log.Infof("Starting from block %d", lastBlock)
 
 	// Load partial batch
-	partialBatchBytes, err := batchDB.Get([]byte("partial_batch"))
-	if err != nil {
-		log.Warnf("Failed to load partial batch: %v", err)
-	}
+	partialBatchBytes, _ := batchDB.Get([]byte("partial_batch"))
 	var partialBatch Batch
 	if partialBatchBytes != nil {
-		if err := json.Unmarshal(partialBatchBytes, &partialBatch); err != nil {
-			log.Errorf("Failed to unmarshal partial batch: %v", err)
-		}
+		json.Unmarshal(partialBatchBytes, &partialBatch)
 	}
 
-	// Initialize batch number with validation
 	batchNo := 1
 	if partialBatch.BatchNo > 0 {
-		// Find the highest batch number in the database
-		maxBatchNo := 0
-		for i := 1; ; i++ {
-			key := []byte(fmt.Sprintf("batch_%d", i))
-			if _, err := batchDB.Get(key); err != nil {
-				break
-			}
-			maxBatchNo = i
-		}
-		if partialBatch.BatchNo <= maxBatchNo {
-			log.Warnf("Partial batch number %d is not greater than last saved batch %d, using %d", partialBatch.BatchNo, maxBatchNo, maxBatchNo+1)
-			batchNo = maxBatchNo + 1
-		} else {
-			batchNo = partialBatch.BatchNo
-		}
+		batchNo = partialBatch.BatchNo
 	}
 
-	// Initialize buffers and mutex
-	var mu sync.Mutex
 	txBuffer := partialBatch.Transactions
 	traceBuffer := partialBatch.ExecutionTraces
 	fromBalanceBuffer := partialBatch.FromBalancesPrevBlock
@@ -194,71 +171,59 @@ func ProcessBlocks(client *eth.Client, junctionClient *junction.JunctionClient, 
 			if len(txBuffer) < 128 {
 				select {
 				case tx := <-txChan:
-					mu.Lock()
 					txBuffer = append(txBuffer, tx.txHex)
 					traceBuffer = append(traceBuffer, tx.trace)
 					fromBalanceBuffer = append(fromBalanceBuffer, tx.fromBalancePrevBlock)
 					toBalanceBuffer = append(toBalanceBuffer, tx.toBalanceCurrentBlock)
 					totalGas += tx.gas
 					timestamp = tx.time
-					mu.Unlock()
 					log.Infof("Added tx to batch #%d: %d/128 txns", batchNo, len(txBuffer))
 				case <-time.After(5 * time.Second):
-					mu.Lock()
 					if len(txBuffer) > 0 {
 						log.Infof("Waiting for batch #%d: %d/128 txns collected", batchNo, len(txBuffer))
 					}
-					mu.Unlock()
 				}
 			}
 
 			// Create batch when full
 			if len(txBuffer) >= 128 {
 				log.Infof("Creating batch #%d with 128 txns", batchNo)
-				mu.Lock()
 				batch := CreateBatch(client, batchDB, daClient, batchNo, txBuffer[:128], traceBuffer[:128], fromBalanceBuffer[:128], toBalanceBuffer[:128], totalGas, timestamp, evmState, rollupNamespace, log)
 				log.Debugf("Batch #%d data: TxCount=%d, PrevHash=%s, BatchHash=%s, PreStateRoot=%s, PostStateRoot=%s, Commitment=%s, DAProvider=%s, DACommitment=%s, Gas=%d, Time=%d",
 					batch.BatchNo, len(batch.Transactions), batch.PrevMerkleHash, batch.CurrentMerkleHash, batch.PreviousStateRoot, batch.CurrentStateRoot, batch.Commitment, batch.DAProvider, batch.DACommitment, batch.Metadata.TotalGasUsed, batch.Metadata.Timestamp)
-
-				txBuffer = txBuffer[128:]
-				traceBuffer = traceBuffer[128:]
-				fromBalanceBuffer = fromBalanceBuffer[128:]
-				toBalanceBuffer = toBalanceBuffer[128:]
-				totalGas = 0
-				timestamp = 0
-				mu.Unlock()
-
-				ctx := context.Background()
-				junctionClient.SubmitBatchMetadata(ctx, uint64(batch.BatchNo), rollupNamespace, batch.DAProvider, batch.DACommitment, batch.DABlockHash, batch.DATxHash, rollupNamespace)
+				SaveBatch(batchDB, batch, log)
+				// ctx := context.Background()
+				// junctionClient.SubmitBatchMetadata(ctx, uint64(batch.BatchNo), rollupNamespace, batch.DAProvider, batch.DACommitment, batch.DABlockHash, batch.DATxHash, rollupNamespace)
 				batch.Submitted = true
-
+				SaveBatch(batchDB, batch, log)
 				batchStruct := convertToBatchStruct(&batch, log)
 				proofData, err := proverClient.ProverGenerate(context.Background(), batchStruct, rollupNamespace, batch.PreviousStateRoot, batch.CurrentStateRoot, batch.CurrentMerkleHash, batch.DACommitment)
 				if err != nil {
 					log.Errorf("Failed to generate proof for batch #%d: %v", batchNo, err)
 					continue
+				} else {
+					log.Infof("Successfully generated proof for batch #%d", batchNo)
+					// Store proof data in the batch
+					proofBytes, _ := json.Marshal(proofData)
+					if err := batchDB.Put([]byte(fmt.Sprintf("proof_%d", batchNo)), proofBytes); err != nil {
+						log.Errorf("Failed to store proof for batch #%d: %v", batchNo, err)
+					}
 				}
-				log.Infof("Successfully generated proof for batch #%d", batchNo)
-				proofBytes, err := json.Marshal(proofData)
-				if err != nil {
-					log.Errorf("Failed to marshal proof data for batch #%d: %v", batchNo, err)
-					continue
-				}
-				if err := batchDB.Put([]byte(fmt.Sprintf("proof_%d", batchNo)), proofBytes); err != nil {
-					log.Errorf("Failed to store proof for batch #%d: %v", batchNo, err)
-					continue
-				}
+				fmt.Println("Proof data:", proofData)
 				junctionClient.SubmitBatch(context.Background(), uint64(batch.BatchNo), rollupNamespace, batch.CurrentMerkleHash, batch.PrevMerkleHash, proofData.ProofData, proofData.PublicInputs)
 				batch.Verified = true
+				SaveBatch(batchDB, batch, log)
 
-				mu.Lock()
 				batchNo++
-				mu.Unlock()
+				txBuffer = txBuffer[128:]
+				traceBuffer = traceBuffer[128:]
+				fromBalanceBuffer = fromBalanceBuffer[128:]
+				toBalanceBuffer = toBalanceBuffer[128:]
+				totalGas = 0
 			}
 
 			// Save partial batch progress
 			if len(txBuffer) > 0 {
-				mu.Lock()
 				partial := Batch{
 					Transactions:           txBuffer,
 					ExecutionTraces:        traceBuffer,
@@ -267,18 +232,8 @@ func ProcessBlocks(client *eth.Client, junctionClient *junction.JunctionClient, 
 					BatchNo:                batchNo,
 					Metadata:               BatchMetadata{TotalGasUsed: totalGas, Timestamp: timestamp, RollupNamespace: rollupNamespace},
 				}
-				partialBytes, err := json.Marshal(partial)
-				if err != nil {
-					log.Errorf("Failed to marshal partial batch #%d: %v", batchNo, err)
-					mu.Unlock()
-					continue
-				}
-				if err := batchDB.Put([]byte("partial_batch"), partialBytes); err != nil {
-					log.Errorf("Failed to save partial batch #%d: %v", batchNo, err)
-					mu.Unlock()
-					continue
-				}
-				mu.Unlock()
+				partialBytes, _ := json.Marshal(partial)
+				batchDB.Put([]byte("partial_batch"), partialBytes)
 			}
 		}
 	}()
@@ -316,61 +271,54 @@ func ProcessBlocks(client *eth.Client, junctionClient *junction.JunctionClient, 
 		txns := block.Transactions()
 
 		for _, tx := range txns {
-			txHex, err := rlp.EncodeToBytes(tx)
-			if err != nil {
-				log.Errorf("Failed to encode transaction %s: %v", tx.Hash().Hex(), err)
-				continue
-			}
+			txHex, _ := rlp.EncodeToBytes(tx)
 			txStr := hex.EncodeToString(txHex)
 
 			vmProcessor.ProcessTransaction(tx, block.Number().String())
 
-			if err := txnDB.Put([]byte("tx_"+tx.Hash().Hex()), []byte(txStr)); err != nil {
-				log.Errorf("Failed to store transaction %s in txnDB: %v", tx.Hash().Hex(), err)
-				continue
-			}
+			txnDB.Put([]byte("tx_"+tx.Hash().Hex()), []byte(txStr))
 
 			var trace json.RawMessage
 			if err := client.Rpc.Call(&trace, "debug_traceTransaction", tx.Hash().Hex()); err != nil {
-				log.Errorf("Failed to fetch trace for tx %s, skipping transaction: %v", tx.Hash().Hex(), err)
-				continue
-			}
-			if len(trace) == 0 {
-				log.Errorf("Empty trace for tx %s, skipping transaction", tx.Hash().Hex())
-				continue
+				// log.Warnf("Failed to fetch trace for tx %s: %v", tx.Hash().Hex(), err)
+				trace = []byte("{}")
 			}
 
 			// Fetch sender's balance from previous block
 			var fromBalancePrevBlock string
 			fromAddr, err := client.Eth.TransactionSender(context.Background(), tx, block.Hash(), 0)
 			if err != nil {
-				log.Errorf("Failed to get sender for tx %s, skipping transaction: %v", tx.Hash().Hex(), err)
-				continue
-			}
-			prevBlockNum := big.NewInt(lastBlock - 1)
-			if prevBlockNum.Sign() <= 0 {
+				log.Warnf("Failed to get sender for tx %s: %v", tx.Hash().Hex(), err)
 				fromBalancePrevBlock = "0x0"
 			} else {
-				balance, err := client.Eth.BalanceAt(context.Background(), fromAddr, prevBlockNum)
-				if err != nil {
-					log.Errorf("Failed to fetch balance for %s at block %d, skipping transaction: %v", fromAddr.Hex(), prevBlockNum, err)
-					continue
+				prevBlockNum := big.NewInt(lastBlock - 1)
+				if prevBlockNum.Sign() <= 0 {
+					fromBalancePrevBlock = "0x0"
+				} else {
+					balance, err := client.Eth.BalanceAt(context.Background(), fromAddr, prevBlockNum)
+					if err != nil {
+						log.Warnf("Failed to fetch balance for %s at block %d: %v", fromAddr.Hex(), prevBlockNum, err)
+						fromBalancePrevBlock = "0x0"
+					} else {
+						fromBalancePrevBlock = "0x" + balance.Text(16)
+					}
 				}
-				fromBalancePrevBlock = "0x" + balance.Text(16)
 			}
 
 			// Fetch recipient's balance from current block
 			var toBalanceCurrentBlock string
 			toAddr := tx.To()
 			if toAddr == nil {
+				// Contract creation transaction, no recipient
 				toBalanceCurrentBlock = "0x0"
 			} else {
 				balance, err := client.Eth.BalanceAt(context.Background(), *toAddr, big.NewInt(lastBlock))
 				if err != nil {
-					log.Errorf("Failed to fetch balance for %s at block %d, skipping transaction: %v", toAddr.Hex(), lastBlock, err)
-					continue
+					log.Warnf("Failed to fetch balance for %s at block %d: %v", toAddr.Hex(), lastBlock, err)
+					toBalanceCurrentBlock = "0x0"
+				} else {
+					toBalanceCurrentBlock = "0x" + balance.Text(16)
 				}
-				toBalanceCurrentBlock = "0x" + balance.Text(16)
 			}
 
 			// Send tx data to batching goroutine
@@ -386,9 +334,7 @@ func ProcessBlocks(client *eth.Client, junctionClient *junction.JunctionClient, 
 
 		// Save block progress
 		lastBlock++
-		if err := batchDB.Put([]byte("last_block"), big.NewInt(lastBlock).Bytes()); err != nil {
-			log.Errorf("Failed to save last block %d: %v", lastBlock, err)
-		}
+		batchDB.Put([]byte("last_block"), big.NewInt(lastBlock).Bytes())
 	}
 }
 
