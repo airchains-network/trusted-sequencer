@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/big"
-	"os"
 	"strings"
 	"time"
 
@@ -211,7 +210,6 @@ func ProcessBlocks(client *eth.Client, junctionClient *junction.JunctionClient, 
 					}
 				}
 				fmt.Println("Proof data:", proofData)
-				os.Exit(1)
 				junctionClient.SubmitBatch(context.Background(), uint64(batch.BatchNo), rollupNamespace, batch.CurrentMerkleHash, batch.PrevMerkleHash, proofData.ProofData, proofData.PublicInputs)
 				batch.Verified = true
 				SaveBatch(batchDB, batch, log)
