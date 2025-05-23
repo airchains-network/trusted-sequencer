@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/big"
+	"os"
 	"strings"
 	"time"
 
@@ -20,6 +21,7 @@ import (
 	"github.com/airchains-network/trusted-sequencer/prover/types"
 	"github.com/airchains-network/trusted-sequencer/state"
 	"github.com/ethereum/go-ethereum/common"
+	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/sirupsen/logrus"
 )
@@ -62,13 +64,55 @@ type txData struct {
 	toBalanceCurrentBlock string
 }
 
-// Convert batch to BatchStruct
-func convertToBatchStruct(batch *Batch) types.BatchStruct {
+func convertToBatchStruct(batch *Batch, log *logrus.Logger) types.BatchStruct {
+	var from, to, amounts, txHashes []string
+
+	for i, txHex := range batch.Transactions {
+		// Remove "0x" prefix and decode hex string
+		txHex = strings.TrimPrefix(txHex, "0x")
+		txBytes, err := hex.DecodeString(txHex)
+		if err != nil {
+			log.Errorf("Failed to decode transaction hex at index %d: %v", i, err)
+			continue // Skip invalid transaction
+		}
+
+		// Decode RLP-encoded transaction
+		var tx ethtypes.Transaction
+		if err := rlp.DecodeBytes(txBytes, &tx); err != nil {
+			log.Errorf("Failed to decode RLP transaction at index %d: %v", i, err)
+			continue // Skip invalid transaction
+		}
+
+		// Get sender address
+		signer := ethtypes.LatestSignerForChainID(tx.ChainId())
+		fromAddr, err := signer.Sender(&tx)
+		if err != nil {
+			log.Errorf("Failed to get sender for transaction at index %d: %v", i, err)
+			from = append(from, "0x0") // Default to zero address
+		} else {
+			from = append(from, fromAddr.Hex())
+		}
+
+		// Get recipient address
+		toAddr := tx.To()
+		if toAddr == nil {
+			to = append(to, "0x0") // Contract creation, no recipient
+		} else {
+			to = append(to, toAddr.Hex())
+		}
+
+		// Get amount (value in wei)
+		amounts = append(amounts, tx.Value().String())
+
+		// Get transaction hash
+		txHashes = append(txHashes, tx.Hash().Hex())
+	}
+
 	return types.BatchStruct{
-		From:              batch.Transactions, // Note: This should be modified to extract actual from addresses
-		To:                batch.Transactions, // Note: This should be modified to extract actual to addresses
-		Amounts:           batch.Transactions, // Note: This should be modified to extract actual amounts
-		TransactionHash:   batch.Transactions, // Note: This should be modified to extract actual tx hashes
+		From:              from,
+		To:                to,
+		Amounts:           amounts,
+		TransactionHash:   txHashes,
 		SenderBalances:    batch.FromBalancesPrevBlock,
 		ReceiverBalances:  batch.ToBalancesCurrentBlock,
 		PreStateRoot:      batch.PreviousStateRoot,
@@ -149,11 +193,11 @@ func ProcessBlocks(client *eth.Client, junctionClient *junction.JunctionClient, 
 				log.Debugf("Batch #%d data: TxCount=%d, PrevHash=%s, BatchHash=%s, PreStateRoot=%s, PostStateRoot=%s, Commitment=%s, DAProvider=%s, DACommitment=%s, Gas=%d, Time=%d",
 					batch.BatchNo, len(batch.Transactions), batch.PrevMerkleHash, batch.CurrentMerkleHash, batch.PreviousStateRoot, batch.CurrentStateRoot, batch.Commitment, batch.DAProvider, batch.DACommitment, batch.Metadata.TotalGasUsed, batch.Metadata.Timestamp)
 				SaveBatch(batchDB, batch, log)
-				ctx := context.Background()
-				junctionClient.SubmitBatchMetadata(ctx, uint64(batch.BatchNo), rollupNamespace, batch.DAProvider, batch.DACommitment, batch.DABlockHash, batch.DATxHash, rollupNamespace)
+				// ctx := context.Background()
+				// junctionClient.SubmitBatchMetadata(ctx, uint64(batch.BatchNo), rollupNamespace, batch.DAProvider, batch.DACommitment, batch.DABlockHash, batch.DATxHash, rollupNamespace)
 				batch.Submitted = true
 				SaveBatch(batchDB, batch, log)
-				batchStruct := convertToBatchStruct(&batch)
+				batchStruct := convertToBatchStruct(&batch, log)
 				proofData, err := proverClient.ProverGenerate(context.Background(), batchStruct, rollupNamespace, batch.PreviousStateRoot, batch.CurrentStateRoot, batch.CurrentMerkleHash, batch.DACommitment)
 				if err != nil {
 					log.Errorf("Failed to generate proof for batch #%d: %v", batchNo, err)
@@ -166,6 +210,8 @@ func ProcessBlocks(client *eth.Client, junctionClient *junction.JunctionClient, 
 						log.Errorf("Failed to store proof for batch #%d: %v", batchNo, err)
 					}
 				}
+				fmt.Println("Proof data:", proofData)
+				os.Exit(1)
 				junctionClient.SubmitBatch(context.Background(), uint64(batch.BatchNo), rollupNamespace, batch.CurrentMerkleHash, batch.PrevMerkleHash, proofData.ProofData, proofData.PublicInputs)
 				batch.Verified = true
 				SaveBatch(batchDB, batch, log)
@@ -236,7 +282,7 @@ func ProcessBlocks(client *eth.Client, junctionClient *junction.JunctionClient, 
 
 			var trace json.RawMessage
 			if err := client.Rpc.Call(&trace, "debug_traceTransaction", tx.Hash().Hex()); err != nil {
-				log.Warnf("Failed to fetch trace for tx %s: %v", tx.Hash().Hex(), err)
+				// log.Warnf("Failed to fetch trace for tx %s: %v", tx.Hash().Hex(), err)
 				trace = []byte("{}")
 			}
 
